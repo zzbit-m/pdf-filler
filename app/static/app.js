@@ -267,7 +267,19 @@ function renderMarkers() {
         marker.textContent = f.column;
         marker.style.left = (f.x * scaleX) + 'px';
         marker.style.top = (f.y * scaleY) + 'px';
-        marker.addEventListener('click', () => removeField(f.column, f.page));
+        marker.draggable = true;
+        marker.addEventListener('dragstart', e => {
+            marker._dragged = true;
+            e.dataTransfer.setData('text/plain', f.column);
+            e.dataTransfer.effectAllowed = 'move';
+        });
+        marker.addEventListener('dragend', () => {
+            setTimeout(() => { marker._dragged = false; }, 0);
+        });
+        marker.addEventListener('click', () => {
+            if (marker._dragged) return;
+            removeField(f.column, f.page);
+        });
         wrapper.appendChild(marker);
     });
     const placedCols = new Set(state.placedFields.map(f => f.column));
