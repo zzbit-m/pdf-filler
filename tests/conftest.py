@@ -5,6 +5,30 @@ import openpyxl
 import pytest
 
 
+@pytest.fixture(scope="session", autouse=True)
+def cleanup_test_data():
+    """Clean up test data from data/templates and data/workflows after tests."""
+    yield  # Run all tests first
+
+    # Clean up test templates
+    templates_dir = Path("data/templates")
+    if templates_dir.exists():
+        for f in templates_dir.glob("*.json"):
+            try:
+                f.unlink()
+            except OSError:
+                pass
+
+    # Clean up test workflows
+    workflows_dir = Path("data/workflows")
+    if workflows_dir.exists():
+        for f in workflows_dir.glob("*.json"):
+            try:
+                f.unlink()
+            except OSError:
+                pass
+
+
 @pytest.fixture
 def sample_pdf(tmp_path: Path) -> Path:
     path = tmp_path / "sample.pdf"
