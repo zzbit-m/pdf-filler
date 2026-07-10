@@ -157,6 +157,8 @@ document.getElementById('to-position-btn').addEventListener('click', () => {
     switchStep(2);
 });
 
+function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
+
 // ======== STEP 2: POSITION ========
 
 function enterStep2() {
@@ -170,6 +172,7 @@ function enterStep2() {
         tag.dataset.column = col;
         tag.addEventListener('dragstart', e => {
             e.dataTransfer.setData('text/plain', col);
+            e.dataTransfer.effectAllowed = 'move';
         });
         container.appendChild(tag);
     });
@@ -210,8 +213,21 @@ document.getElementById('next-page').addEventListener('click', () => {
 const previewWrapper = document.getElementById('preview-wrapper');
 const previewImg = document.getElementById('pdf-preview');
 
-previewWrapper.addEventListener('dragover', e => { e.preventDefault(); previewWrapper.classList.add('drag-over'); });
-previewWrapper.addEventListener('dragleave', () => { previewWrapper.classList.remove('drag-over'); });
+previewWrapper.addEventListener('dragenter', e => {
+    e.preventDefault();
+    previewWrapper.classList.add('drag-over');
+});
+previewWrapper.addEventListener('dragover', e => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    previewWrapper.classList.add('drag-over');
+});
+previewWrapper.addEventListener('dragleave', () => {
+    previewWrapper.classList.remove('drag-over');
+});
+previewWrapper.addEventListener('dragend', () => {
+    previewWrapper.classList.remove('drag-over');
+});
 previewWrapper.addEventListener('drop', e => {
     e.preventDefault();
     previewWrapper.classList.remove('drag-over');
@@ -219,10 +235,12 @@ previewWrapper.addEventListener('drop', e => {
     if (!column) return;
     if (!previewImg.naturalWidth) return;
     const rect = previewImg.getBoundingClientRect();
-    const scaleX = previewImg.naturalWidth / rect.width;
-    const scaleY = previewImg.naturalHeight / rect.height;
-    const pixelX = (e.clientX - rect.left) * scaleX;
-    const pixelY = (e.clientY - rect.top) * scaleY;
+    const scaleX = previewImg.naturalWidth / previewImg.clientWidth;
+    const scaleY = previewImg.naturalHeight / previewImg.clientHeight;
+    const rawX = (e.clientX - rect.left) * scaleX;
+    const rawY = (e.clientY - rect.top) * scaleY;
+    const pixelX = clamp(rawX, 0, previewImg.naturalWidth);
+    const pixelY = clamp(rawY, 0, previewImg.naturalHeight);
     const existing = state.placedFields.findIndex(f => f.column === column && f.page === state.currentPage);
     if (existing >= 0) {
         state.placedFields[existing].x = pixelX;
