@@ -1,0 +1,41 @@
+[project]
+name = "pdf-filler"
+version = "0.1.0"
+description = "Drag Excel data onto flat PDF previews and generate filled copies"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.32.0",
+    "PyMuPDF>=1.25.0",
+    "Pillow>=11.0.0",
+    "openpyxl>=3.1.0",
+    "python-multipart>=0.0.12",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.24.0",
+    "httpx>=0.28.0",
+]
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+
+[tool.mypy]
+strict = true
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "tests.*"
+disallow_untyped_defs = false
+disable_error_code = "no-any-return"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

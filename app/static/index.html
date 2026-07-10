@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PDF Filler</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app">
+<header>
+<h1>PDF Filler</h1>
+</header>
+<nav id="step-nav">
+<button class="step active" data-step="1">1. Upload</button>
+<button class="step" data-step="2">2. Position</button>
+<button class="step" data-step="3">3. Generate</button>
+</nav>
+<main>
+<section id="step-1" class="step-content active">
+<div class="upload-grid">
+<div class="upload-card">
+<h3>Upload Excel (.xlsx)</h3>
+<p class="hint">Your data file with employee information</p>
+<div class="file-input-wrapper">
+<input type="file" id="excel-input" accept=".xlsx">
+</div>
+<div id="excel-status" class="msg-box" style="display:none"></div>
+<div id="excel-preview" style="display:none">
+<h4>Columns detected</h4>
+<div id="column-list-upload" class="tag-list"></div>
+<h4>Preview rows</h4>
+<div id="preview-table-wrapper"></div>
+</div>
+</div>
+<div class="upload-card">
+<h3>Upload PDF template</h3>
+<p class="hint">The blank PDF form to fill in</p>
+<div class="file-input-wrapper">
+<input type="file" id="pdf-input" accept=".pdf">
+</div>
+<div id="pdf-status" class="msg-box" style="display:none"></div>
+<div id="pdf-info" style="display:none">
+<h4>PDF loaded</h4>
+<p id="pdf-details"></p>
+</div>
+</div>
+</div>
+<button id="to-position-btn" class="btn btn-primary" disabled>Next: Position Fields &rarr;</button>
+</section>
+<section id="step-2" class="step-content">
+<div class="position-layout">
+<div class="preview-column">
+<div id="preview-wrapper">
+<img id="pdf-preview" alt="PDF Preview">
+</div>
+<div class="page-nav">
+<button id="prev-page" class="btn btn-small">&larr; Prev</button>
+<span id="page-indicator">Page 1 / 1</span>
+<button id="next-page" class="btn btn-small">Next &rarr;</button>
+</div>
+<p class="hint">Drag a column name from the sidebar and drop it onto the preview to set its position.</p>
+</div>
+<aside class="sidebar">
+<h3>Available Columns</h3>
+<div id="available-columns" class="column-list"></div>
+<hr>
+<h3>Auto-position</h3>
+<div id="suggestion-status" class="msg-box" style="display:none"></div>
+<div id="suggestion-list">
+<p class="hint">Loading suggestions...</p>
+</div>
+<button id="apply-suggestions-btn" class="btn btn-small" disabled>Apply Selected</button>
+<hr>
+<h3>Template</h3>
+<input type="text" id="template-name-input" placeholder="Template name (e.g. Employee Form)">
+<div id="placed-fields-list">
+<p class="hint">No fields placed yet.</p>
+</div>
+<button id="save-template-btn" class="btn btn-primary" disabled>Save Template</button>
+<div id="template-save-status" class="msg-box" style="display:none"></div>
+</aside>
+</div>
+</section>
+<section id="step-3" class="step-content">
+<h3>Generate Filled PDFs</h3>
+<div class="step3-tabs">
+<button class="step3-tab active" data-tab="single" id="tab-btn-single">Single Template</button>
+<button class="step3-tab" data-tab="workflow" id="tab-btn-workflow">Workflow Batch</button>
+</div>
+<div id="tab-single" class="tab-content active">
+<div class="generate-form">
+<div class="form-group">
+<label>Saved Templates</label>
+<div id="template-grid"><p class="hint">Loading templates...</p></div>
+</div>
+<div class="form-group">
+<label for="fill-excel-input">Excel Data File</label>
+<p class="hint">Upload the Excel file with the data to fill in</p>
+<input type="file" id="fill-excel-input" accept=".xlsx">
+</div>
+<div id="fill-excel-status" class="msg-box" style="display:none"></div>
+<button id="start-fill-btn" class="btn btn-primary" disabled>Generate PDFs</button>
+<div id="fill-warnings" style="display:none" class="msg-box warning-box"></div>
+</div>
+</div>
+<div id="tab-workflow" class="tab-content">
+<div class="generate-form">
+<div class="form-group">
+<label>Saved Workflows</label>
+<div id="workflow-grid"><p class="hint">Loading workflows...</p></div>
+</div>
+<button type="button" class="btn" id="toggle-create-workflow-btn">+ Create Workflow</button>
+<div id="create-workflow-panel" style="display:none" class="create-panel">
+<div class="form-group">
+<label for="workflow-name-input">Workflow Name</label>
+<input type="text" id="workflow-name-input" placeholder="e.g. Department Forms">
+</div>
+<div class="form-group">
+<label for="workflow-excel-input">Upload Excel (for routing discovery)</label>
+<input type="file" id="workflow-excel-input" accept=".xlsx">
+</div>
+<div id="workflow-routing-preview" style="display:none">
+<div class="form-group">
+<label for="routing-column-select">Routing Column</label>
+<select id="routing-column-select"><option value="">-- Pick a column --</option></select>
+</div>
+<div id="routing-values-list"></div>
+<button id="save-workflow-btn" class="btn btn-primary" disabled>Save Workflow</button>
+<div id="workflow-save-status" class="msg-box" style="display:none"></div>
+</div>
+</div>
+<div class="form-group">
+<label for="workflow-excel-data-input">Excel Data File</label>
+<p class="hint">Upload the Excel file with the data to fill in</p>
+<input type="file" id="workflow-excel-data-input" accept=".xlsx">
+</div>
+<div id="workflow-fill-excel-status" class="msg-box" style="display:none"></div>
+<button id="start-workflow-fill-btn" class="btn btn-primary" disabled>Generate PDFs</button>
+<div id="workflow-fill-warnings" style="display:none" class="msg-box warning-box"></div>
+</div>
+</div>
+<div id="fill-progress" style="display:none">
+<div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
+<span id="progress-text">Processing...</span>
+</div>
+<div id="fill-done" style="display:none">
+<a id="download-link" class="btn btn-success" download="filled_pdfs.zip">Download ZIP</a>
+</div>
+<div id="fill-error" class="msg-box" style="display:none"></div>
+</section>
+</main>
+</div>
+<script src="app.js"></script>
+</body>
+</html>
