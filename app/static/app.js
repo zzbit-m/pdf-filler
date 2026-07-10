@@ -72,6 +72,7 @@ document.getElementById('excel-input').addEventListener('change', async e => {
     const file = e.target.files[0];
     if (!file) return;
     document.getElementById('excel-file-name').textContent = file.name;
+    document.getElementById('excel-clear').style.display = 'inline-block';
     showMsg('excel-status', 'Uploading...', 'ok');
     const fd = new FormData();
     fd.append('file', file);
@@ -88,6 +89,7 @@ document.getElementById('excel-input').addEventListener('change', async e => {
     } catch (err) {
         showMsg('excel-status', err.message, 'error');
         document.getElementById('excel-file-name').textContent = 'No file chosen';
+        document.getElementById('excel-clear').style.display = 'none';
         e.target.value = '';
     }
 });
@@ -96,6 +98,7 @@ document.getElementById('pdf-input').addEventListener('change', async e => {
     const file = e.target.files[0];
     if (!file) return;
     document.getElementById('pdf-file-name').textContent = file.name;
+    document.getElementById('pdf-clear').style.display = 'inline-block';
     showMsg('pdf-status', 'Uploading...', 'ok');
     const fd = new FormData();
     fd.append('file', file);
@@ -111,6 +114,7 @@ document.getElementById('pdf-input').addEventListener('change', async e => {
     } catch (err) {
         showMsg('pdf-status', err.message, 'error');
         document.getElementById('pdf-file-name').textContent = 'No file chosen';
+        document.getElementById('pdf-clear').style.display = 'none';
         e.target.value = '';
     }
 });
@@ -462,8 +466,58 @@ document.getElementById('save-template-btn').addEventListener('click', async () 
         }
         switchStep(3);
     } catch (err) {
-        showMsg('template-save-status', err.message, 'error');
+        showMsg('fill-error', err.message, 'error');
     }
+});
+
+// ======== CLEAR FILE BUTTONS ========
+
+document.getElementById('excel-clear').addEventListener('click', () => {
+    document.getElementById('excel-input').value = '';
+    document.getElementById('excel-file-name').textContent = 'No file chosen';
+    document.getElementById('excel-clear').style.display = 'none';
+    document.getElementById('excel-status').style.display = 'none';
+    document.getElementById('excel-preview').style.display = 'none';
+    document.querySelector('.upload-card:first-child').classList.remove('file-loaded');
+    state.columns = [];
+    state.previewRows = [];
+    checkStep2Ready();
+});
+
+document.getElementById('pdf-clear').addEventListener('click', () => {
+    document.getElementById('pdf-input').value = '';
+    document.getElementById('pdf-file-name').textContent = 'No file chosen';
+    document.getElementById('pdf-clear').style.display = 'none';
+    document.getElementById('pdf-status').style.display = 'none';
+    document.getElementById('pdf-info').style.display = 'none';
+    document.querySelector('.upload-card:last-child').classList.remove('file-loaded');
+    state.pdfId = null;
+    state.pageCount = 0;
+    checkStep2Ready();
+});
+
+document.getElementById('fill-excel-clear').addEventListener('click', () => {
+    document.getElementById('fill-excel-input').value = '';
+    document.getElementById('fill-excel-file-name').textContent = 'No file chosen';
+    document.getElementById('fill-excel-clear').style.display = 'none';
+    document.getElementById('fill-excel-status').style.display = 'none';
+    checkFillReady();
+});
+
+document.getElementById('workflow-excel-clear').addEventListener('click', () => {
+    document.getElementById('workflow-excel-input').value = '';
+    document.getElementById('workflow-excel-file-name').textContent = 'No file chosen';
+    document.getElementById('workflow-excel-clear').style.display = 'none';
+    document.getElementById('workflow-routing-preview').style.display = 'none';
+    state.workflowExcelId = null;
+});
+
+document.getElementById('workflow-excel-data-clear').addEventListener('click', () => {
+    document.getElementById('workflow-excel-data-input').value = '';
+    document.getElementById('workflow-excel-data-file-name').textContent = 'No file chosen';
+    document.getElementById('workflow-excel-data-clear').style.display = 'none';
+    document.getElementById('workflow-fill-excel-status').style.display = 'none';
+    checkWorkflowFillReady();
 });
 
 // ======== STEP 3: GENERATE ========
@@ -617,11 +671,14 @@ async function deleteTemplate(id) {
 document.getElementById('fill-excel-input').addEventListener('change', e => {
     checkFillReady();
     const el = document.getElementById('fill-excel-file-name');
+    const btn = document.getElementById('fill-excel-clear');
     if (e.target.files[0]) {
         el.textContent = e.target.files[0].name;
+        btn.style.display = 'inline-block';
         showMsg('fill-excel-status', 'Selected: ' + e.target.files[0].name, 'ok');
     } else {
         el.textContent = 'No file chosen';
+        btn.style.display = 'none';
         document.getElementById('fill-excel-status').style.display = 'none';
     }
 });
@@ -816,6 +873,7 @@ document.getElementById('workflow-excel-input').addEventListener('change', async
     const file = e.target.files[0];
     if (!file) return;
     document.getElementById('workflow-excel-file-name').textContent = file.name;
+    document.getElementById('workflow-excel-clear').style.display = 'inline-block';
     const fd = new FormData();
     fd.append('file', file);
     try {
@@ -908,11 +966,14 @@ document.getElementById('save-workflow-btn').addEventListener('click', async () 
 document.getElementById('workflow-excel-data-input').addEventListener('change', e => {
     checkWorkflowFillReady();
     const el = document.getElementById('workflow-excel-data-file-name');
+    const btn = document.getElementById('workflow-excel-data-clear');
     if (e.target.files[0]) {
         el.textContent = e.target.files[0].name;
+        btn.style.display = 'inline-block';
         showMsg('workflow-fill-excel-status', 'Selected: ' + e.target.files[0].name, 'ok');
     } else {
         el.textContent = 'No file chosen';
+        btn.style.display = 'none';
         document.getElementById('workflow-fill-excel-status').style.display = 'none';
     }
 });
