@@ -7,7 +7,7 @@ class TestTemplateManager:
     def test_save_and_get(self, templates_dir: Path) -> None:
         mgr = TemplateManager(templates_dir)
         tid = mgr.save("Test Template", "some.pdf", [
-            {"column": "Name", "page": 0, "x": 100, "y": 200, "font_size": 11},
+            {"column": "Name", "page": 1, "x": 100, "y": 200, "font_size": 11},
         ])
 
         loaded = mgr.get(tid)
@@ -61,7 +61,7 @@ class TestTemplateManager:
     def test_duplicate_existing(self, templates_dir: Path) -> None:
         mgr = TemplateManager(templates_dir)
         tid = mgr.save("Original", "x.pdf", [
-            {"column": "Name", "page": 0, "x": 100, "y": 200, "font_size": 11},
+            {"column": "Name", "page": 1, "x": 100, "y": 200, "font_size": 11},
         ])
         dup = mgr.duplicate(tid)
         assert dup is not None
@@ -83,7 +83,7 @@ class TestTemplateManager:
 
     def test_list_all_skips_corrupt_file(self, templates_dir: Path) -> None:
         mgr = TemplateManager(templates_dir)
-        fields = [{"column": "A", "page": 0, "x": 1, "y": 2, "font_size": 11}]
+        fields = [{"column": "A", "page": 1, "x": 1, "y": 2, "font_size": 11}]
         tid = mgr.save("Good", "g.pdf", fields)
         corrupt = templates_dir / "corrupt.json"
         corrupt.write_text("{bad json", encoding="utf-8")

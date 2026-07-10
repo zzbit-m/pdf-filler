@@ -41,10 +41,11 @@ async def save_template(req: TemplateSaveRequest) -> TemplateSaveResponse:
 
     converted = []
     for f in req.fields:
-        page_h = page_heights.get(f.page, 842)
+        page_zero = f.page - 1
+        page_h = page_heights.get(page_zero, 842)
         converted.append({
             "column": f.column,
-            "page": f.page,
+            "page": page_zero,
             "x": pixel_to_point(f.x),
             "y": page_h - pixel_to_point(f.y),
             "font_size": f.font_size,
@@ -63,7 +64,8 @@ async def save_template(req: TemplateSaveRequest) -> TemplateSaveResponse:
                 dy = abs(ay - by)
                 if dx < 5 and dy < 5:
                     warnings.append(
-                        f"Fields '{a['column']}' and '{b['column']}' overlap on page {a['page']}"
+                        f"Fields '{a['column']}' and '{b['column']}' overlap"
+                        f" on page {a['page'] + 1}"
                     )
 
     template_id = manager.save(name=req.name, pdf_file=req.pdf_file, fields=converted)

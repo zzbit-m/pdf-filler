@@ -125,7 +125,7 @@ class TestPreview:
 
 class TestTemplate:
     def test_save_and_list(self):
-        fields = [{"column": "Name", "page": 0, "x": 100, "y": 200, "font_size": 11}]
+        fields = [{"column": "Name", "page": 1, "x": 100, "y": 200, "font_size": 11}]
         resp = client.post(
             "/template",
             json={"name": "Test", "pdf_file": "test.pdf", "fields": fields},
@@ -149,7 +149,7 @@ class TestTemplate:
         assert resp.status_code == 400
 
     def test_get_and_delete(self):
-        fields = [{"column": "Name", "page": 0, "x": 100, "y": 200, "font_size": 11}]
+        fields = [{"column": "Name", "page": 1, "x": 100, "y": 200, "font_size": 11}]
         create_resp = client.post(
             "/template",
             json={"name": "GetDel", "pdf_file": "test.pdf", "fields": fields},
@@ -176,8 +176,8 @@ class TestTemplate:
 
     def test_overlap_warning(self):
         fields = [
-            {"column": "Name", "page": 0, "x": 100, "y": 100, "font_size": 11},
-            {"column": "Role", "page": 0, "x": 101, "y": 101, "font_size": 11},
+            {"column": "Name", "page": 1, "x": 100, "y": 100, "font_size": 11},
+            {"column": "Role", "page": 1, "x": 101, "y": 101, "font_size": 11},
         ]
         resp = client.post(
             "/template",
@@ -188,8 +188,8 @@ class TestTemplate:
 
     def test_no_overlap_warning(self):
         fields = [
-            {"column": "Name", "page": 0, "x": 100, "y": 100, "font_size": 11},
-            {"column": "Role", "page": 0, "x": 300, "y": 300, "font_size": 11},
+            {"column": "Name", "page": 1, "x": 100, "y": 100, "font_size": 11},
+            {"column": "Role", "page": 1, "x": 300, "y": 300, "font_size": 11},
         ]
         resp = client.post(
             "/template",
@@ -199,7 +199,7 @@ class TestTemplate:
         assert len(resp.json()["warnings"]) == 0
 
     def test_rename_template(self):
-        fields = [{"column": "Name", "page": 0, "x": 100, "y": 200, "font_size": 11}]
+        fields = [{"column": "Name", "page": 1, "x": 100, "y": 200, "font_size": 11}]
         create = client.post(
             "/template",
             json={"name": "Old", "pdf_file": "test.pdf", "fields": fields},
@@ -218,7 +218,7 @@ class TestTemplate:
         assert resp.status_code == 404
 
     def test_duplicate_template(self):
-        fields = [{"column": "Name", "page": 0, "x": 100, "y": 200, "font_size": 11}]
+        fields = [{"column": "Name", "page": 1, "x": 100, "y": 200, "font_size": 11}]
         create = client.post(
             "/template",
             json={"name": "Original", "pdf_file": "test.pdf", "fields": fields},
@@ -244,7 +244,7 @@ class TestTemplate:
         )
         pdf_id = pdf_resp.json()["pdf_id"]
 
-        fields = [{"column": "Name", "page": 0, "x": 100, "y": 200, "font_size": 11}]
+        fields = [{"column": "Name", "page": 1, "x": 100, "y": 200, "font_size": 11}]
         tmpl_resp = client.post(
             "/template",
             json={"name": "Thumb", "pdf_file": f"{pdf_id}.pdf", "fields": fields},
@@ -256,7 +256,7 @@ class TestTemplate:
         assert resp.headers["content-type"] == "image/png"
 
     def test_thumbnail_missing_pdf(self):
-        fields = [{"column": "Name", "page": 0, "x": 100, "y": 200, "font_size": 11}]
+        fields = [{"column": "Name", "page": 1, "x": 100, "y": 200, "font_size": 11}]
         create = client.post(
             "/template",
             json={"name": "NoPdf", "pdf_file": "nonexistent.pdf", "fields": fields},
@@ -266,7 +266,7 @@ class TestTemplate:
         assert resp.status_code == 404
 
     def test_thumbnail_invalid_pdf_file(self):
-        fields = [{"column": "Name", "page": 0, "x": 100, "y": 200, "font_size": 11}]
+        fields = [{"column": "Name", "page": 1, "x": 100, "y": 200, "font_size": 11}]
         create = client.post(
             "/template",
             json={"name": "BadPdfRef", "pdf_file": "../../etc/passwd", "fields": fields},
@@ -286,7 +286,7 @@ class TestFill:
         pdf_id = pdf_resp.json()["pdf_id"]
 
         fields = [
-            {"column": col, "page": 0, "x": 100 + i * 50, "y": 200, "font_size": 11}
+            {"column": col, "page": 1, "x": 100 + i * 50, "y": 200, "font_size": 11}
             for i, col in enumerate(columns)
         ]
         tmpl_resp = client.post(
@@ -368,7 +368,7 @@ class TestFill:
             files={"file": ("template.pdf", pdf_content, "application/pdf")},
         )
         pdf_id = pdf_resp.json()["pdf_id"]
-        fields = [{"column": "Name", "page": 0, "x": 100, "y": 200, "font_size": 11}]
+        fields = [{"column": "Name", "page": 1, "x": 100, "y": 200, "font_size": 11}]
         tmpl_resp = client.post(
             "/template",
             json={"name": "ErrTest", "pdf_file": f"{pdf_id}.pdf", "fields": fields},
@@ -392,7 +392,7 @@ class TestFill:
 
 class TestWorkflow:
     def test_create_workflow(self):
-        fields = [{"column": "Name", "page": 0, "x": 100, "y": 200, "font_size": 11}]
+        fields = [{"column": "Name", "page": 1, "x": 100, "y": 200, "font_size": 11}]
         tmpl = client.post(
             "/template",
             json={"name": "WF Tmpl", "pdf_file": "test.pdf", "fields": fields},
@@ -411,7 +411,7 @@ class TestWorkflow:
         assert data["route_count"] == 1
 
     def test_create_duplicate_route_values(self):
-        fields = [{"column": "Name", "page": 0, "x": 100, "y": 200, "font_size": 11}]
+        fields = [{"column": "Name", "page": 1, "x": 100, "y": 200, "font_size": 11}]
         tmpl = client.post(
             "/template",
             json={"name": "WF Dup", "pdf_file": "test.pdf", "fields": fields},
@@ -435,7 +435,7 @@ class TestWorkflow:
         assert resp.status_code == 422
 
     def test_list_workflows(self):
-        fields = [{"column": "Name", "page": 0, "x": 100, "y": 200, "font_size": 11}]
+        fields = [{"column": "Name", "page": 1, "x": 100, "y": 200, "font_size": 11}]
         tmpl = client.post(
             "/template",
             json={"name": "WF List", "pdf_file": "test.pdf", "fields": fields},
@@ -454,7 +454,7 @@ class TestWorkflow:
         assert "WF A" in names
 
     def test_get_workflow(self):
-        fields = [{"column": "Name", "page": 0, "x": 100, "y": 200, "font_size": 11}]
+        fields = [{"column": "Name", "page": 1, "x": 100, "y": 200, "font_size": 11}]
         tmpl = client.post(
             "/template",
             json={"name": "WF Get", "pdf_file": "test.pdf", "fields": fields},
@@ -478,7 +478,7 @@ class TestWorkflow:
         assert resp.status_code == 404
 
     def test_rename_workflow(self):
-        fields = [{"column": "Name", "page": 0, "x": 100, "y": 200, "font_size": 11}]
+        fields = [{"column": "Name", "page": 1, "x": 100, "y": 200, "font_size": 11}]
         tmpl = client.post(
             "/template",
             json={"name": "WF Ren", "pdf_file": "test.pdf", "fields": fields},
@@ -495,7 +495,7 @@ class TestWorkflow:
         assert rename.json()["name"] == "New WF"
 
     def test_delete_workflow(self):
-        fields = [{"column": "Name", "page": 0, "x": 100, "y": 200, "font_size": 11}]
+        fields = [{"column": "Name", "page": 1, "x": 100, "y": 200, "font_size": 11}]
         tmpl = client.post(
             "/template",
             json={"name": "WF Del", "pdf_file": "test.pdf", "fields": fields},
@@ -531,14 +531,14 @@ class TestWorkflow:
         tmpl_A = client.post("/template", json={
             "name": "Template A",
             "pdf_file": f"{pdf_id_A}.pdf",
-            "fields": [{"column": "Name", "page": 0, "x": 100, "y": 200, "font_size": 11}],
+            "fields": [{"column": "Name", "page": 1, "x": 100, "y": 200, "font_size": 11}],
         })
         tid_A = tmpl_A.json()["id"]
 
         tmpl_B = client.post("/template", json={
             "name": "Template B",
             "pdf_file": f"{pdf_id_B}.pdf",
-            "fields": [{"column": "Role", "page": 0, "x": 100, "y": 200, "font_size": 11}],
+            "fields": [{"column": "Role", "page": 1, "x": 100, "y": 200, "font_size": 11}],
         })
         tid_B = tmpl_B.json()["id"]
 
@@ -577,7 +577,7 @@ class TestWorkflow:
         assert "zip" in dl_resp.headers["content-type"]
 
     def test_workflow_fill_missing_routing_column(self):
-        fields = [{"column": "Name", "page": 0, "x": 100, "y": 200, "font_size": 11}]
+        fields = [{"column": "Name", "page": 1, "x": 100, "y": 200, "font_size": 11}]
         tmpl = client.post(
             "/template",
             json={"name": "WF Col", "pdf_file": "test.pdf", "fields": fields},
@@ -608,7 +608,7 @@ class TestWorkflow:
         assert resp.status_code == 404
 
     def test_workflow_fill_no_routes(self):
-        fields = [{"column": "Name", "page": 0, "x": 100, "y": 200, "font_size": 11}]
+        fields = [{"column": "Name", "page": 1, "x": 100, "y": 200, "font_size": 11}]
         tmpl = client.post(
             "/template",
             json={"name": "WF NoR", "pdf_file": "test.pdf", "fields": fields},
@@ -646,7 +646,7 @@ class TestWorkflow:
         pdf_id = upload.json()["pdf_id"]
         tmpl = client.post("/template", json={
             "name": "Gone Soon", "pdf_file": f"{pdf_id}.pdf",
-            "fields": [{"column": "Name", "page": 0, "x": 100, "y": 200, "font_size": 11}],
+            "fields": [{"column": "Name", "page": 1, "x": 100, "y": 200, "font_size": 11}],
         })
         tid = tmpl.json()["id"]
 
