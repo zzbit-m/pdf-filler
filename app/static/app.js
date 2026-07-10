@@ -296,7 +296,7 @@ function renderMarkers() {
         if (placedCols.has(s.column)) return;
         if (unchecked.has(s.column)) return;
         const px = pointToPixel(s.x);
-        const py = pointToPixel(s.y);
+        const py = img.naturalHeight - pointToPixel(s.y);
         const marker = document.createElement('div');
         marker.className = 'marker-suggestion';
         marker.textContent = s.column;
@@ -416,6 +416,7 @@ function applySuggestions() {
     });
     if (checked.size === 0) return;
     const placedCols = new Set(state.placedFields.map(f => f.column));
+    const img = document.getElementById('pdf-preview');
     state.suggestions.forEach(s => {
         if (!checked.has(s.column)) return;
         if (placedCols.has(s.column)) return;
@@ -423,7 +424,7 @@ function applySuggestions() {
             column: s.column,
             page: state.currentPage,
             x: pointToPixel(s.x),
-            y: pointToPixel(s.y),
+            y: img.naturalHeight - pointToPixel(s.y),
             font_size: 11,
             max_width: null,
         });

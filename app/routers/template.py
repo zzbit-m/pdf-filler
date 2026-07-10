@@ -1,6 +1,7 @@
 from pathlib import Path
 from typing import Any, cast
 
+import fitz
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
 
@@ -27,13 +28,25 @@ async def save_template(req: TemplateSaveRequest) -> TemplateSaveResponse:
     if not req.fields:
         raise HTTPException(400, detail="At least one field position is required")
 
+    pdf_path = UPLOAD_DIR / req.pdf_file
+    page_heights = {}
+    if pdf_path.exists():
+        doc = fitz.open(pdf_path)
+        try:
+            for i in range(doc.page_count):
+                page = doc[i]
+                page_heights[i] = page.rect.height
+        finally:
+            doc.close()
+
     converted = []
     for f in req.fields:
+        page_h = page_heights.get(f.page, 842)
         converted.append({
             "column": f.column,
             "page": f.page,
             "x": pixel_to_point(f.x),
-            "y": pixel_to_point(f.y),
+            "y": page_h - pixel_to_point(f.y),
             "font_size": f.font_size,
             "max_width": f.max_width,
         })
