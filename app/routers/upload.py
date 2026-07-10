@@ -15,16 +15,28 @@ UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 EXCEL_ID_RE = re.compile(r"^[0-9a-f-]+$")
 
+ALLOWED_EXCEL = {".xlsx", ".xlsm"}
+
 
 @router.post("/excel", response_model=ExcelUploadResponse)
 async def upload_excel(file: UploadFile) -> ExcelUploadResponse:
-    if not file.filename or not file.filename.lower().endswith(".xlsx"):
-        raise HTTPException(400, detail="Only .xlsx files are accepted")
+    if not file.filename:
+        raise HTTPException(400, detail="No filename provided")
+    ext = Path(file.filename).suffix.lower()
+    if ext not in ALLOWED_EXCEL:
+        raise HTTPException(400, detail=f"Unsupported file type '{ext}'. Use .xlsx or .xlsm")
     excel_id = str(uuid.uuid4())
     filepath = UPLOAD_DIR / f"{excel_id}.xlsx"
     content = await file.read()
     filepath.write_bytes(content)
-    columns, rows = read_rows(filepath)
+    try:
+        columns, rows = read_rows(filepath)
+    except Exception:
+        filepath.unlink(missing_ok=True)
+        raise HTTPException(
+            400,
+            detail="Cannot read this Excel file. Save it as .xlsx and try again.",
+        )
     if not columns:
         raise HTTPException(400, detail="Excel file has no columns in row 3")
     return ExcelUploadResponse(columns=columns, preview_rows=rows[:3], excel_id=excel_id)

@@ -21,6 +21,12 @@ WORKFLOWS_DIR = Path("data/workflows")
 OUTPUT_DIR = Path("data/output")
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
+ALLOWED_EXCEL = {".xlsx", ".xlsm"}
+TEMPLATES_DIR = Path("data/templates")
+WORKFLOWS_DIR = Path("data/workflows")
+OUTPUT_DIR = Path("data/output")
+OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+
 manager = TemplateManager(TEMPLATES_DIR)
 workflow_mgr = WorkflowManager(WORKFLOWS_DIR)
 
@@ -127,8 +133,8 @@ async def start_fill(
     if template is None:
         raise HTTPException(404, detail="Template not found")
 
-    if not file.filename or not file.filename.lower().endswith(".xlsx"):
-        raise HTTPException(400, detail="Only .xlsx files are accepted")
+    if not file.filename or Path(file.filename).suffix.lower() not in ALLOWED_EXCEL:
+        raise HTTPException(400, detail="Only .xlsx and .xlsm files are accepted")
 
     excel_path = UPLOAD_DIR / f"{uuid.uuid4()}.xlsx"
     content = await file.read()
@@ -161,8 +167,8 @@ async def start_workflow_fill(
     if not workflow.get("routes"):
         raise HTTPException(400, detail="Workflow has no routes")
 
-    if not file.filename or not file.filename.lower().endswith(".xlsx"):
-        raise HTTPException(400, detail="Only .xlsx files are accepted")
+    if not file.filename or Path(file.filename).suffix.lower() not in ALLOWED_EXCEL:
+        raise HTTPException(400, detail="Only .xlsx and .xlsm files are accepted")
 
     excel_path = UPLOAD_DIR / f"{uuid.uuid4()}.xlsx"
     content = await file.read()

@@ -23,7 +23,7 @@
 <h3>Upload Excel (.xlsx)</h3>
 <p class="hint">Your data file with employee information</p>
 <div class="file-input-wrapper">
-<input type="file" id="excel-input" accept=".xlsx">
+<input type="file" id="excel-input" accept=".xlsx,.xlsm">
 </div>
 <div id="excel-status" class="msg-box" style="display:none"></div>
 <div id="excel-preview" style="display:none">
@@ -97,7 +97,7 @@
 <div class="form-group">
 <label for="fill-excel-input">Excel Data File</label>
 <p class="hint">Upload the Excel file with the data to fill in</p>
-<input type="file" id="fill-excel-input" accept=".xlsx">
+<input type="file" id="fill-excel-input" accept=".xlsx,.xlsm">
 </div>
 <div id="fill-excel-status" class="msg-box" style="display:none"></div>
 <button id="start-fill-btn" class="btn btn-primary" disabled>Generate PDFs</button>
@@ -118,7 +118,7 @@
 </div>
 <div class="form-group">
 <label for="workflow-excel-input">Upload Excel (for routing discovery)</label>
-<input type="file" id="workflow-excel-input" accept=".xlsx">
+<input type="file" id="workflow-excel-input" accept=".xlsx,.xlsm">
 </div>
 <div id="workflow-routing-preview" style="display:none">
 <div class="form-group">
@@ -133,7 +133,7 @@
 <div class="form-group">
 <label for="workflow-excel-data-input">Excel Data File</label>
 <p class="hint">Upload the Excel file with the data to fill in</p>
-<input type="file" id="workflow-excel-data-input" accept=".xlsx">
+<input type="file" id="workflow-excel-data-input" accept=".xlsx,.xlsm">
 </div>
 <div id="workflow-fill-excel-status" class="msg-box" style="display:none"></div>
 <button id="start-workflow-fill-btn" class="btn btn-primary" disabled>Generate PDFs</button>
