@@ -29,3 +29,6 @@ data/preview_cache/
 
 # Playwright logs
 .playwright-mcp/
+
+# Locked reference files (Windows temp)
+Files/
