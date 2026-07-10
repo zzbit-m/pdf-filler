@@ -624,6 +624,8 @@ function renderTemplateGrid(list) {
             deleteTemplate(btn.dataset.id);
         });
     });
+
+    document.getElementById('delete-all-templates').style.display = list.length ? 'inline' : 'none';
 }
 
 function selectTemplate(id) {
@@ -817,6 +819,8 @@ function renderWorkflowGrid(list) {
             deleteWorkflow(btn.dataset.id);
         });
     });
+
+    document.getElementById('delete-all-workflows').style.display = list.length ? 'inline' : 'none';
 }
 
 function selectWorkflow(id) {
@@ -891,7 +895,39 @@ document.getElementById('workflow-excel-input').addEventListener('change', async
         document.getElementById('routing-values-list').innerHTML = '<p class="hint">Select a routing column above.</p>';
         document.getElementById('save-workflow-btn').disabled = true;
     } catch (err) {
-        alert('Excel upload failed: ' + err.message);
+        showMsg('fill-error', err.message, 'error');
+    }
+});
+
+// ======== DELETE ALL ========
+
+document.getElementById('delete-all-templates').addEventListener('click', async e => {
+    e.preventDefault();
+    if (!window.confirm('Delete all templates? This cannot be undone.')) return;
+    try {
+        const list = await api('GET', '/template/list');
+        for (const t of list) {
+            await api('DELETE', '/template/' + t.id);
+        }
+        state.templateId = null;
+        await loadTemplates();
+    } catch (err) {
+        alert('Failed to delete all templates: ' + err.message);
+    }
+});
+
+document.getElementById('delete-all-workflows').addEventListener('click', async e => {
+    e.preventDefault();
+    if (!window.confirm('Delete all workflows? This cannot be undone.')) return;
+    try {
+        const list = await api('GET', '/workflow/list');
+        for (const w of list) {
+            await api('DELETE', '/workflow/' + w.id);
+        }
+        state.workflowId = null;
+        await loadWorkflows();
+    } catch (err) {
+        alert('Failed to delete all workflows: ' + err.message);
     }
 });
 

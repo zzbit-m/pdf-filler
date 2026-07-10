@@ -23,6 +23,8 @@ header h1 { font-size: 20px; font-weight: normal; }
 .file-name { font-size: 12px; color: #666; margin-left: 8px; }
 .btn-clear { display: inline-block; width: 18px; height: 18px; line-height: 16px; text-align: center; border: 1px solid #c04040; background: #d9534f; color: #fff; font-size: 12px; cursor: pointer; padding: 0; margin-left: 4px; border-radius: 2px; }
 .btn-clear:hover { background: #c04040; }
+.delete-all-link { font-size: 11px; color: #a94442; margin-left: 8px; text-decoration: underline; cursor: pointer; }
+.delete-all-link:hover { color: #7a2e2e; }
 .msg-box { padding: 8px 12px; margin: 8px 0; font-size: 13px; border: 1px solid transparent; }
 .msg-box.status-ok { color: #3c763d; background: #dff0d8; border-color: #d6e9c6; }
 .msg-box.status-error { color: #a94442; background: #f2dede; border-color: #ebccd1; }
