@@ -11,7 +11,7 @@ header h1 { font-size: 20px; font-weight: normal; }
 .step-content { display: none; background: #fff; border: 1px solid #ccc; border-top: none; padding: 20px; min-height: 400px; }
 .step-content.active { display: block; }
 .upload-grid { display: flex; gap: 20px; margin-bottom: 20px; }
-.upload-card { flex: 1; border: 2px dashed #ccc; padding: 20px; text-align: center; min-height: 200px; }
+.upload-card { flex: 1; min-width: 0; border: 2px dashed #ccc; padding: 20px; text-align: center; min-height: 200px; }
 .upload-card h3 { margin-bottom: 6px; font-size: 16px; font-weight: bold; }
 .upload-card .hint { font-size: 12px; color: #888; margin-bottom: 12px; }
 .upload-card.file-loaded { border-color: #4A90D9; border-style: solid; background: #f8fbff; }
@@ -28,7 +28,7 @@ header h1 { font-size: 20px; font-weight: normal; }
 .tag-list { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
 .tag { display: inline-block; background: #e0e7f0; border: 1px solid #b0c0d0; padding: 4px 10px; font-size: 12px; cursor: grab; user-select: none; }
 .tag:active { cursor: grabbing; }
-#preview-table-wrapper { overflow-x: auto; margin-top: 8px; }
+#preview-table-wrapper { overflow-x: auto; max-width: 100%; margin-top: 8px; }
 #preview-table-wrapper table { width: 100%; border-collapse: collapse; font-size: 12px; }
 #preview-table-wrapper th, #preview-table-wrapper td { border: 1px solid #ccc; padding: 4px 8px; text-align: left; }
 #preview-table-wrapper th { background: #e8eef5; font-weight: bold; }
