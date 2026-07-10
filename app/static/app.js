@@ -14,6 +14,10 @@ const state = {
     workflowId: null,
     workflowExcelId: null,
     workflowRoutingColumn: null,
+    batchFiles: [],
+    previewIndex: 1,
+    previewPage: 1,
+    previewPageCount: 1,
 };
 
 function api(method, url, data) {
@@ -746,6 +750,11 @@ function startPolling(batchId) {
                     w.innerHTML = '<strong>Batch warnings:</strong><br>' + data.warnings.join('<br>');
                     w.style.display = 'block';
                 }
+                state.batchFiles = data.files || [];
+                state.previewIndex = 1;
+                state.previewPage = 1;
+                state.previewPageCount = 1;
+                loadFillPreview(batchId);
             } else if (data.status === 'error') {
                 state.polling = false;
                 showMsg('fill-error', data.error || 'An error occurred during generation.', 'error');
@@ -913,8 +922,58 @@ document.getElementById('delete-all-templates').addEventListener('click', async 
         state.templateId = null;
         await loadTemplates();
     } catch (err) {
-        alert('Failed to delete all templates: ' + err.message);
+        showMsg('fill-error', err.message, 'error');
     }
+});
+
+// ======== FILL RESULT PREVIEW ========
+
+function loadFillPreview(batchId) {
+    const files = state.batchFiles;
+    if (!files.length) return;
+    const idx = state.previewIndex;
+    if (idx < 1 || idx > files.length) return;
+    document.getElementById('fill-preview').style.display = 'block';
+    document.getElementById('fill-preview-file-info').textContent = 'File ' + idx + ' / ' + files.length;
+    document.getElementById('prev-file').disabled = idx <= 1;
+    document.getElementById('next-file').disabled = idx >= files.length;
+    const img = document.getElementById('fill-preview-img');
+    img.src = '/fill/' + batchId + '/preview/' + idx + '/' + state.previewPage + '?t=' + Date.now();
+    img.onload = () => {
+        state.previewPageCount = 1;
+        document.getElementById('fill-preview-page-info').textContent = 'Page ' + state.previewPage + ' / 1';
+        document.getElementById('prev-gen-page').disabled = true;
+        document.getElementById('next-gen-page').disabled = true;
+    };
+    document.getElementById('fill-preview-wrapper').style.display = 'block';
+}
+
+document.getElementById('prev-file').addEventListener('click', () => {
+    if (state.previewIndex > 1) {
+        state.previewIndex--;
+        state.previewPage = 1;
+        loadFillPreview(state.batchId);
+    }
+});
+
+document.getElementById('next-file').addEventListener('click', () => {
+    if (state.previewIndex < state.batchFiles.length) {
+        state.previewIndex++;
+        state.previewPage = 1;
+        loadFillPreview(state.batchId);
+    }
+});
+
+document.getElementById('prev-gen-page').addEventListener('click', () => {
+    if (state.previewPage > 1) {
+        state.previewPage--;
+        loadFillPreview(state.batchId);
+    }
+});
+
+document.getElementById('next-gen-page').addEventListener('click', () => {
+    state.previewPage++;
+    loadFillPreview(state.batchId);
 });
 
 document.getElementById('delete-all-workflows').addEventListener('click', async e => {

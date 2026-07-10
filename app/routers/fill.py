@@ -10,6 +10,7 @@ from fastapi.responses import FileResponse
 from app.schemas.models import FillStartResponse, FillStatusResponse
 from app.services.excel_reader import read_rows
 from app.services.pdf_overlay import overlay_fields
+from app.services.pdf_preview import render_preview
 from app.services.template_manager import TemplateManager
 from app.services.workflow_manager import WorkflowManager
 
@@ -20,6 +21,7 @@ TEMPLATES_DIR = Path("data/templates")
 WORKFLOWS_DIR = Path("data/workflows")
 OUTPUT_DIR = Path("data/output")
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+GENERATED_PREVIEW_CACHE = Path("data/preview_cache/generated")
 
 ALLOWED_EXCEL = {".xlsx", ".xlsm"}
 TEMPLATES_DIR = Path("data/templates")
@@ -46,10 +48,13 @@ def _run_batch(batch_id: str, template: dict[str, Any], excel_path: Path) -> Non
     batch_output.mkdir(parents=True, exist_ok=True)
 
     total = len(rows)
+    files: list[str] = []
     for i, row in enumerate(rows):
         try:
-            output_path = batch_output / f"employee_{i + 1}.pdf"
+            filename = f"employee_{i + 1}.pdf"
+            output_path = batch_output / filename
             overlay_fields(pdf_path, fields, row, output_path)
+            files.append(filename)
         except Exception as exc:
             err_msg = str(exc)
             fill_state[batch_id] = {
@@ -63,6 +68,7 @@ def _run_batch(batch_id: str, template: dict[str, Any], excel_path: Path) -> Non
         "total": total,
         "completed": total,
         "output_dir": str(batch_output),
+        "files": files,
     }
 
 
@@ -78,6 +84,7 @@ def _run_workflow_batch(
 
     total = len(rows)
     warnings: list[str] = []
+    files: list[str] = []
     for i, row in enumerate(rows):
         routing_value = row.get(routing_column, "").strip()
         if not routing_value:
@@ -104,9 +111,11 @@ def _run_workflow_batch(
         fields = template["fields"]
         pdf_path = UPLOAD_DIR / template["pdf_file"]
         safe = _sanitize_filename(routing_value)
-        output_path = batch_output / f"{i + 1}_{safe}.pdf"
+        filename = f"{i + 1}_{safe}.pdf"
+        output_path = batch_output / filename
         try:
             overlay_fields(pdf_path, fields, row, output_path)
+            files.append(filename)
         except Exception as exc:
             fill_state[batch_id] = {
                 "status": "error", "total": total, "completed": i,
@@ -120,6 +129,7 @@ def _run_workflow_batch(
     fill_state[batch_id] = {
         "status": "completed", "total": total, "completed": total,
         "output_dir": str(batch_output), "warnings": warnings,
+        "files": files,
     }
 
 
@@ -208,6 +218,7 @@ async def fill_status(batch_id: str) -> FillStatusResponse:
         total=state["total"],
         error=state.get("error"),
         warnings=state.get("warnings", []),
+        files=state.get("files", []),
     )
 
 
@@ -228,3 +239,34 @@ async def fill_download(batch_id: str) -> FileResponse:
         media_type="application/zip",
         filename=f"filled_{batch_id}.zip",
     )
+
+
+@router.get("/{batch_id}/preview/{index}/{page}")
+async def generated_preview(batch_id: str, index: int, page: int) -> FileResponse:
+    state = fill_state.get(batch_id)
+    if state is None:
+        raise HTTPException(404, detail="Batch not found")
+    if state["status"] != "completed":
+        raise HTTPException(400, detail="Batch not yet completed")
+
+    files: list[str] = state.get("files", [])
+    if index < 1 or index > len(files):
+        raise HTTPException(404, detail="File index out of range")
+
+    output_dir = Path(state["output_dir"])
+    pdf_path = output_dir / files[index - 1]
+    if not pdf_path.exists():
+        raise HTTPException(404, detail="Generated PDF not found")
+
+    zero_indexed = page - 1
+    if zero_indexed < 0:
+        raise HTTPException(400, detail="Page must be >= 1")
+
+    cache_dir = GENERATED_PREVIEW_CACHE / batch_id
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        result = render_preview(pdf_path, zero_indexed, cache_dir=cache_dir)
+    except ValueError:
+        raise HTTPException(404, detail="Page out of range")
+
+    return FileResponse(str(Path(result["image_path"])), media_type="image/png")

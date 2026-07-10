@@ -67,6 +67,7 @@ class FillStatusResponse(BaseModel):
     total: int
     error: str | None = None
     warnings: list[str] = []
+    files: list[str] = []
 
 
 class RouteEntry(BaseModel):
