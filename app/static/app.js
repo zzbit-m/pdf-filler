@@ -233,6 +233,7 @@ previewWrapper.addEventListener('drop', e => {
     previewWrapper.classList.remove('drag-over');
     const column = e.dataTransfer.getData('text/plain');
     if (!column) return;
+    if (!state.columns.includes(column)) return;
     if (!previewImg.naturalWidth) return;
     const rect = previewImg.getBoundingClientRect();
     const scaleX = previewImg.naturalWidth / previewImg.clientWidth;
