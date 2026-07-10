@@ -23,7 +23,9 @@
 <h3>Upload Excel (.xlsx)</h3>
 <p class="hint">Your data file with employee information</p>
 <div class="file-input-wrapper">
-<input type="file" id="excel-input" accept=".xlsx,.xlsm">
+  <input type="file" id="excel-input" accept=".xlsx,.xlsm" class="file-input-hidden">
+  <label for="excel-input" class="file-label">Choose File</label>
+  <span class="file-name" id="excel-file-name">No file chosen</span>
 </div>
 <div id="excel-status" class="msg-box" style="display:none"></div>
 <div id="excel-preview" style="display:none">
@@ -37,7 +39,9 @@
 <h3>Upload PDF template</h3>
 <p class="hint">The blank PDF form to fill in</p>
 <div class="file-input-wrapper">
-<input type="file" id="pdf-input" accept=".pdf">
+  <input type="file" id="pdf-input" accept=".pdf" class="file-input-hidden">
+  <label for="pdf-input" class="file-label">Choose File</label>
+  <span class="file-name" id="pdf-file-name">No file chosen</span>
 </div>
 <div id="pdf-status" class="msg-box" style="display:none"></div>
 <div id="pdf-info" style="display:none">
@@ -94,12 +98,16 @@
 <label>Saved Templates</label>
 <div id="template-grid"><p class="hint">Loading templates...</p></div>
 </div>
-<div class="form-group">
-<label for="fill-excel-input">Excel Data File</label>
-<p class="hint">Upload the Excel file with the data to fill in</p>
-<input type="file" id="fill-excel-input" accept=".xlsx,.xlsm">
-</div>
-<div id="fill-excel-status" class="msg-box" style="display:none"></div>
+              <div class="form-group">
+                <label>Excel Data File</label>
+                <p class="hint">Upload the Excel file with the data to fill in</p>
+                <div class="file-input-wrapper" style="text-align:left">
+                  <input type="file" id="fill-excel-input" accept=".xlsx,.xlsm" class="file-input-hidden">
+                  <label for="fill-excel-input" class="file-label">Choose File</label>
+                  <span class="file-name" id="fill-excel-file-name">No file chosen</span>
+                </div>
+              </div>
+              <div id="fill-excel-status" class="msg-box" style="display:none"></div>
 <button id="start-fill-btn" class="btn btn-primary" disabled>Generate PDFs</button>
 <div id="fill-warnings" style="display:none" class="msg-box warning-box"></div>
 </div>
@@ -116,10 +124,14 @@
 <label for="workflow-name-input">Workflow Name</label>
 <input type="text" id="workflow-name-input" placeholder="e.g. Department Forms">
 </div>
-<div class="form-group">
-<label for="workflow-excel-input">Upload Excel (for routing discovery)</label>
-<input type="file" id="workflow-excel-input" accept=".xlsx,.xlsm">
-</div>
+              <div class="form-group">
+                <label>Upload Excel (for routing discovery)</label>
+                <div class="file-input-wrapper" style="text-align:left">
+                  <input type="file" id="workflow-excel-input" accept=".xlsx,.xlsm" class="file-input-hidden">
+                  <label for="workflow-excel-input" class="file-label">Choose File</label>
+                  <span class="file-name" id="workflow-excel-file-name">No file chosen</span>
+                </div>
+              </div>
 <div id="workflow-routing-preview" style="display:none">
 <div class="form-group">
 <label for="routing-column-select">Routing Column</label>
@@ -130,11 +142,15 @@
 <div id="workflow-save-status" class="msg-box" style="display:none"></div>
 </div>
 </div>
-<div class="form-group">
-<label for="workflow-excel-data-input">Excel Data File</label>
-<p class="hint">Upload the Excel file with the data to fill in</p>
-<input type="file" id="workflow-excel-data-input" accept=".xlsx,.xlsm">
-</div>
+              <div class="form-group">
+                <label>Excel Data File</label>
+                <p class="hint">Upload the Excel file with the data to fill in</p>
+                <div class="file-input-wrapper" style="text-align:left">
+                  <input type="file" id="workflow-excel-data-input" accept=".xlsx,.xlsm" class="file-input-hidden">
+                  <label for="workflow-excel-data-input" class="file-label">Choose File</label>
+                  <span class="file-name" id="workflow-excel-data-file-name">No file chosen</span>
+                </div>
+              </div>
 <div id="workflow-fill-excel-status" class="msg-box" style="display:none"></div>
 <button id="start-workflow-fill-btn" class="btn btn-primary" disabled>Generate PDFs</button>
 <div id="workflow-fill-warnings" style="display:none" class="msg-box warning-box"></div>
