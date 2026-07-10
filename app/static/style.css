@@ -49,7 +49,7 @@ header h1 { font-size: 20px; font-weight: normal; }
 #preview-wrapper { position: relative; display: inline-block; max-width: 100%; border: 1px solid #ccc; }
 #preview-wrapper img { display: block; max-width: 100%; height: auto; cursor: crosshair; }
 #preview-wrapper.drag-over { outline: 3px solid #4A90D9; outline-offset: -3px; }
-.marker { position: absolute; background: rgba(74, 144, 217, 0.25); border: 2px solid #4A90D9; padding: 2px 6px; font-size: 10px; color: #4A90D9; cursor: pointer; white-space: nowrap; font-weight: bold; pointer-events: auto; }
+.marker { position: absolute; background: rgba(74, 144, 217, 0.25); border: 2px solid #4A90D9; padding: 2px 6px; font-size: 10px; color: #4A90D9; cursor: pointer; white-space: nowrap; font-weight: bold; pointer-events: auto; transform: translate(-50%, -50%); }
 .marker:hover { background: rgba(74, 144, 217, 0.45); }
 .marker-suggestion { position: absolute; border: 2px dashed #5cb85c; background: rgba(92, 184, 92, 0.2); padding: 2px 6px; font-size: 10px; color: #3a7a3a; white-space: nowrap; font-weight: bold; pointer-events: none; }
 #suggestion-list { max-height: 200px; overflow-y: auto; margin-bottom: 4px; }
