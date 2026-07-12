@@ -23,7 +23,7 @@ uv run uvicorn app.main:app --reload
 - **app/** — FastAPI backend + static frontend
   - `app/main.py` — app entrypoint
   - `app/routers/` — route handlers (upload, template, fill)
-  - `app/services/` — business logic (excel_reader, pdf_preview, pdf_overlay, auto_position, font_loader, template_manager)
+  - `app/services/` — business logic (excel_reader, pdf_preview, pdf_overlay, font_loader, template_manager)
   - `app/schemas/models.py` — Pydantic models
   - `app/static/` — HTML/CSS/JS (plain, no framework)
 - **data/** — runtime directories: uploads/, templates/, output/

@@ -91,9 +91,36 @@ class TestTemplateManager:
         ids = [t["id"] for t in all_t]
         assert tid in ids
 
+    def test_list_all_skips_file_missing_name_key(self, templates_dir: Path) -> None:
+        mgr = TemplateManager(templates_dir)
+        fields = [{"column": "A", "page": 1, "x": 1, "y": 2, "font_size": 11}]
+        tid = mgr.save("Good", "g.pdf", fields)
+        bad = templates_dir / "no_name.json"
+        bad.write_text('{"id": "x", "pdf_file": "x.pdf", "version": 1}', encoding="utf-8")
+        all_t = mgr.list_all()
+        ids = [t["id"] for t in all_t]
+        assert tid in ids
+        assert "x" not in ids
+
     def test_get_corrupt_file_returns_none(self, templates_dir: Path) -> None:
         mgr = TemplateManager(templates_dir)
         tid = mgr.save("Good", "g.pdf", [])
         path = mgr._path(tid)
         path.write_text("{bad json", encoding="utf-8")
         assert mgr.get(tid) is None
+
+    def test_get_malformed_id_returns_none(self, templates_dir: Path) -> None:
+        mgr = TemplateManager(templates_dir)
+        assert mgr.get("not-a-valid-id!!") is None
+
+    def test_delete_malformed_id_returns_false(self, templates_dir: Path) -> None:
+        mgr = TemplateManager(templates_dir)
+        assert mgr.delete("not-a-valid-id!!") is False
+
+    def test_rename_malformed_id_returns_false(self, templates_dir: Path) -> None:
+        mgr = TemplateManager(templates_dir)
+        assert mgr.rename("not-a-valid-id!!", "X") is False
+
+    def test_duplicate_malformed_id_returns_none(self, templates_dir: Path) -> None:
+        mgr = TemplateManager(templates_dir)
+        assert mgr.duplicate("not-a-valid-id!!") is None

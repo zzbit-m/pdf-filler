@@ -273,6 +273,22 @@ class TestTemplate:
         )
         assert resp.status_code == 400
 
+    def test_get_malformed_id_404(self):
+        resp = client.get("/template/not-a-valid-id!!")
+        assert resp.status_code == 404
+
+    def test_delete_malformed_id_404(self):
+        resp = client.delete("/template/not-a-valid-id!!")
+        assert resp.status_code == 404
+
+    def test_rename_malformed_id_404(self):
+        resp = client.put("/template/not-a-valid-id!!", json={"name": "X"})
+        assert resp.status_code == 404
+
+    def test_duplicate_malformed_id_404(self):
+        resp = client.post("/template/not-a-valid-id!!/duplicate", json={})
+        assert resp.status_code == 404
+
 
 class TestFill:
     def _upload_pdf_and_create_template(self, columns: list[str]) -> tuple[str, str]:
@@ -321,6 +337,15 @@ class TestFill:
         resp = client.post(
             "/fill",
             params={"template_id": "00000000-0000-0000-0000-000000000000"},
+            files={"file": ("data.xlsx", excel_content, XLSX_MIME)},
+        )
+        assert resp.status_code == 404
+
+    def test_template_malformed_id_404(self):
+        excel_content = _create_excel(["Name"], [["Alice"]])
+        resp = client.post(
+            "/fill",
+            params={"template_id": "not-a-valid-id!!"},
             files={"file": ("data.xlsx", excel_content, XLSX_MIME)},
         )
         assert resp.status_code == 404

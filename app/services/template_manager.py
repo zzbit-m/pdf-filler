@@ -41,18 +41,24 @@ class TemplateManager:
                 data = json.loads(f.read_text(encoding="utf-8"))
             except (json.JSONDecodeError, OSError):
                 continue
-            templates.append({
-                "id": data["id"],
-                "name": data["name"],
-                "pdf_file": data["pdf_file"],
-                "version": data["version"],
-                "created_at": data.get("created_at", ""),
-                "field_count": len(data.get("fields", [])),
-            })
+            try:
+                templates.append({
+                    "id": data["id"],
+                    "name": data["name"],
+                    "pdf_file": data["pdf_file"],
+                    "version": data["version"],
+                    "created_at": data.get("created_at", ""),
+                    "field_count": len(data.get("fields", [])),
+                })
+            except KeyError:
+                continue
         return templates
 
     def get(self, template_id: str) -> dict[str, Any] | None:
-        path = self._path(template_id)
+        try:
+            path = self._path(template_id)
+        except ValueError:
+            return None
         if not path.exists():
             return None
         try:
@@ -87,7 +93,10 @@ class TemplateManager:
         return template
 
     def delete(self, template_id: str) -> bool:
-        path = self._path(template_id)
+        try:
+            path = self._path(template_id)
+        except ValueError:
+            return False
         if not path.exists():
             return False
         path.unlink()

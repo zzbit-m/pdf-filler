@@ -52,7 +52,7 @@ def sample_excel(tmp_path: Path) -> Path:
 
 @pytest.fixture
 def sample_font() -> str:
-    return "C:\\Windows\\Fonts\\arial.ttf"
+    return str(Path(__file__).resolve().parent.parent / "app" / "fonts" / "tahoma.ttf")
 
 
 @pytest.fixture
