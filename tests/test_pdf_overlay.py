@@ -85,3 +85,51 @@ def test_thai_text_rendering(sample_pdf: Path, tmp_path: Path) -> None:
         assert len(blocks) > 0
     finally:
         doc.close()
+
+
+def _build_pdf_with_rotation(rotation: int, tmp_path: Path) -> Path:
+    path = tmp_path / f"rot_{rotation}.pdf"
+    doc = fitz.open()
+    page = doc.new_page(width=400, height=500)
+    page.set_rotation(rotation)
+    doc.save(str(path))
+    doc.close()
+    return path
+
+
+def test_text_horizontal_on_rotated_page(tmp_path: Path) -> None:
+    """Text on rotated pages must appear horizontal in the visual frame."""
+    font_path = get_font_path()
+    for rotation in [0, 90, 180, 270]:
+        pdf = _build_pdf_with_rotation(rotation, tmp_path)
+        out = tmp_path / f"filled_rot_{rotation}.pdf"
+        fields = [
+            {"column": "name", "page": 0, "x": 200, "y": 250, "font_size": 14},
+        ]
+        overlay_fields(pdf, fields, {"name": "REF"}, out, font_path)
+
+        doc = fitz.open(out)
+        try:
+            page = doc[0]
+            assert page.rotation == rotation
+
+            pix = page.get_pixmap(dpi=150)
+            w, h = pix.width, pix.height
+
+            text_y_extent: list[int] = []
+            for y in range(h):
+                for x in range(w):
+                    pixel = pix.pixel(x, y)
+                    if isinstance(pixel, tuple) and pixel[0] < 100:
+                        text_y_extent.append(y)
+                        break
+
+            assert text_y_extent, f"rot={rotation}: no text pixels found"
+            y_spread = max(text_y_extent) - min(text_y_extent)
+            text_height_pix = 14 * 150 / 72
+            assert y_spread < text_height_pix * 2.5, (
+                f"rot={rotation}: text spans y={min(text_y_extent)}..{max(text_y_extent)} "
+                f"(spread {y_spread}), expected roughly one line height ({text_height_pix:.0f})"
+            )
+        finally:
+            doc.close()

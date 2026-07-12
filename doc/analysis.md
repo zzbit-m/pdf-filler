@@ -184,10 +184,10 @@ Classic 2010s admin panel style. Flat header, bordered tables, blue links, gray 
       → `app/routers/upload.py:upload_pdf`; saves to `data/uploads/{uuid}.pdf`; checks `doc.needs_pass` for encrypted; rejects 0-page PDFs
 - [x] 3. `GET /preview/{pdf_id}/{page}` — renders a PDF page as PNG at fixed DPI for the drag UI
       → `app/routers/preview.py:get_preview`; uses `render_preview()` at 150 DPI; caches to `data/preview_cache/`; returns `image/png`
-- [x] 4. Coordinate normalization — backend converts preview pixel clicks → PDF points (1/72"). Template stores only PDF-point coordinates, never pixels.
-      → `app/services/pdf_preview.py:pixel_to_point()` converts pixel → point (`pixel * 72 / dpi`); called by `app/routers/template.py:save_template()` before storing fields
-- [x] 5. Bundle Thai TTF in project; `PdfOverlay` uses `fitz.Font(fontfile=...)` with the bundled font for `insert_text()`. Verify Thai glyphs render with real names from Excel.
-      → `app/fonts/tahoma.ttf` bundled (Tahoma supports Thai); added to `font_loader._THAI_CANDIDATES`; `tests/test_pdf_overlay.py:test_thai_text_rendering` verifies Thai text overlay produces larger output file with content blocks
+- [x] 4. Coordinate normalization — backend converts preview pixel clicks → PDF points (1/72"). Template stores only PDF-point coordinates, never pixels. Refactored to use PyMuPDF's `derotation_matrix` so all rotations are handled uniformly (no per-rotation if/else).
+      → `app/services/pdf_preview.py:pixel_to_point()` converts pixel → point (`pixel * 72 / dpi`); called by `app/routers/template.py:save_template()` (L32-39 builds `page_derotation` dict from `doc[i].derotation_matrix`; L44-46 applies `fitz.Point(...) * derot` per field) before storing fields
+- [x] 5. Bundle Thai TTF in project; `PdfOverlay` embeds the font into the output PDF and uses it for `insert_text()`. Verify Thai glyphs render with real names from Excel.
+      → `app/fonts/tahoma.ttf` bundled (Tahoma supports Thai); `app/services/pdf_overlay.py:24-30` calls `page.insert_font(fontfile=path, fontname="FillCustom")` to **embed** Tahoma (Type0 CID with Identity-H), then `insert_text(fontname="FillCustom", ...)` at L60-61 — must use `insert_font` first, otherwise `fontfile` alone does not embed (see Post-Phase-5 fix #1); `tests/test_pdf_overlay.py:test_thai_text_rendering` verifies Thai text overlay produces larger output file with content blocks
 - [x] 6. Frontend — **upload screen**: upload Excel + upload PDF; sidebar shows detected columns
       → `app/static/index.html` step-1 section; `app.js` handles upload via FormData + shows columns in tag-list + preview table
 - [x] 7. Frontend — **position screen**: PDF preview (page navigable) + draggable column names from sidebar
@@ -217,7 +217,7 @@ Classic 2010s admin panel style. Flat header, bordered tables, blue links, gray 
 - [x] 19. Frontend uses classic 2010s styling (flat, bordered tables, simple palette)
       → `app/static/style.css` — flat design, bordered tables with alternating rows, blue header (#4A90D9), flat buttons with hover states, no rounded corners or glassmorphism
 - [x] 20. `uv run pytest -x` passes for all tests
-      → 49 tests collected, 49 passed (1.78s). Guard chain: ruff ✅ mypy ✅ pytest ✅
+      → 121 tests collected, 121 passed (~10s). Guard chain: ruff ✅ mypy ✅ pytest ✅. (Was 49 at Phase 1; grew with Phases 3-5; +9 for rotation handling added in Post-Phase-5 fix #5.)
 
 ### Phase 2
 
@@ -229,14 +229,14 @@ Multi-page support — position fields across different pages of the PDF
       → `app/services/auto_position.py:8-51`; groups by `(block_no, line_no)`, joins words with space, skips text >100 chars
 - [x] 2. `suggest_positions()` with fuzzy scoring — matches Excel column names to extracted PDF labels using combined `SequenceMatcher` ratio + word overlap + substring boost; returns suggested (x, y, confidence) coordinates right of the matched label
       → `app/services/auto_position.py:54-105`; `_combined_score()` at L70-75 uses `max(seq, overlap) + boost`; coords at L97-101: `x = label["x1"] + 8`, `y = label["y0"]`; threshold default 0.7
-- [x] 3. `GET /preview/suggest/{pdf_id}/{page}?columns=...` — API endpoint returning suggestions for a given PDF page; accepts columns as repeated query params
-      → `app/routers/preview.py:17-44`; converts 1-indexed page to 0-indexed; returns `{"suggestions": [...], "hint": ...}`; 404 on missing PDF, 400 on bad page
+- [x] 3. `GET /preview/suggest/{pdf_id}/{page}?columns=...` — API endpoint returning suggestions for a given PDF page; accepts columns as repeated query params; suggestion coordinates are converted from unrotated PDF space to visual space for rotated pages so the frontend can render markers at correct visual positions.
+      → `app/routers/preview.py:18-58`; converts 1-indexed page to 0-indexed (L26); returns `{"suggestions": [...], "hint": ...}`; 404 on missing PDF, 400 on bad page; rotation conversion at L46-56 via `pg.rotation_matrix` * `fitz.Point`
 - [x] 4. Frontend — suggestion checklist in sidebar: fetches suggestions on page load/page change, renders with confidence badges (high≥90%, mid≥70%, low<70%), checkboxes per suggestion
       → `app/static/app.js:316-364` (`fetchSuggestions` at L316, `renderSuggestions` at L337, confidence badge classes at L350-355); called at L170, L185, L194 on step2 enter and page change
 - [x] 5. Frontend — "Apply Selected" button places checked suggestions as markers on the preview; suggestion markers render as dashed green border `.marker-suggestion`; duplicates and already-placed columns are skipped
       → `app/static/app.js:366-390` (`applySuggestions` at L366); `app.js:249-260` renders `.marker-suggestion` divs; `style.css:50` `.marker-suggestion` dashed green border
 - [x] 6. Tests — 21 tests covering label extraction, scoring functions, and suggestion logic in isolation
-      → `tests/test_auto_position.py` (21 tests in 3 classes: `TestExtractLabels`, `TestScoring`, `TestSuggestPositions`); `uv run pytest -x` passes all 70 tests
+      → `tests/test_auto_position.py` (21 tests in 3 classes: `TestExtractLabels`, `TestScoring`, `TestSuggestPositions`); `uv run pytest -x` passes all 112 tests
 
 ### Phase 4
 
@@ -264,8 +264,8 @@ Multi-page support — position fields across different pages of the PDF
       → `tests/test_template_manager.py:49-99` (`test_rename_existing`, `test_rename_nonexistent`, `test_duplicate_existing`, `test_duplicate_nonexistent`, `test_duplicate_custom_name`, `test_list_all_skips_corrupt_file`, `test_get_corrupt_file_returns_none`)
 - [x] 12. Tests — 7 new integration tests: rename ×2, duplicate ×2, thumbnail ×3
       → `tests/test_routers.py:201-272` (`test_rename_template`, `test_rename_template_404`, `test_duplicate_template`, `test_duplicate_template_404`, `test_thumbnail`, `test_thumbnail_missing_pdf`, `test_thumbnail_invalid_pdf_file`)
-- [x] 13. Guard chain passes — ruff, mypy, 84/84 pytest
-      → ruff ✅, mypy ✅, `uv run pytest -x` 84 passed (4.12s)
+- [x] 13. Guard chain passes — ruff, mypy, 112/112 pytest
+      → ruff ✅, mypy ✅, `uv run pytest -x` 112 passed (~5s)
 
 ### Phase 5
 
@@ -313,5 +313,20 @@ Batch multi-PDF templates (one Excel → many different PDF types)
       → `tests/test_routers.py:393-674` (class `TestWorkflow`); reuses `_create_pdf()` and `_create_excel()` helpers
 - [x] 21. `read_unique_values` tests — column found, column not found
       → `tests/test_excel_reader.py:60-67`
-- [x] 22. Guard chain passes — ruff, mypy, 109/109 pytest
-      → ruff ✅, mypy ✅, `uv run pytest -x` 109 passed (verified at time of Phase 5 completion)
+- [x] 22. Guard chain passes — ruff, mypy, 112/112 pytest
+      → ruff ✅, mypy ✅, `uv run pytest -x` 112 passed (verified; +3 tests since Phase 5 close — see Post-Phase-5 fixes)
+
+### Post-Phase-5 fixes (unplanned, discovered during real fill runs)
+
+These were not in any phase plan. Each was found when the user ran the actual fill on a real Thai PDF and saw unexpected output.
+
+- [x] 1. **Font embedding** — `page.insert_text(fontfile=...)` does NOT embed the font in the output PDF. The PDF references Helvetica/WinAnsiEncoding, so character codes from Tahoma's internal mapping (0xB7) get written instead of the correct ASCII codes (e.g. "Mr." → 0xB7 0xB7 0xB7). Visible to the user as "no text" in any external PDF viewer, even though `get_text()` round-trips fine.
+      → `app/services/pdf_overlay.py:24-30` calls `page.insert_font(fontfile=path, fontname="FillCustom")` to embed; `insert_text(..., fontname="FillCustom")` at L60-61 references the embedded font. Verified: output PDF has font `[(9, 'ttf', 'Type0', 'Tahoma Regular', 'FillCustom', 'Identity-H')]` and extracted text matches input. Tradeoff: each output PDF balloons from ~17KB to ~970KB (full TTF embedded).
+- [x] 2. **Rotated-page coordinate conversion** — `save_template()` did `y = page_h - py` regardless of `page.rotation`, which is only correct for Rotate 0. On a Rotate 270 Thai government form (MediaBox 842×595, displayed as 595×842), the stored coordinates were in the wrong space and `insert_text()` placed text on the right edge rotated 90° instead of at the click position.
+      → `app/routers/template.py:32-46` builds a `page_derotation` dict from `doc[i].derotation_matrix` per page, then for each field applies `fitz.Point(pixel_to_point(f.x), pixel_to_point(f.y)) * derot` — uniform matrix approach replaces the original per-rotation if/else. Verified by `tests/test_rotation.py:TestRotationConversion` (5 tests) which check the saved unrotated coords against `derotation_matrix` for all 4 rotations.
+- [x] 3. **Generated-PDF preview** — user asked for a preview of the generated (filled) PDFs, not just the original template PDF.
+      → `app/routers/fill.py:244-272` adds `GET /fill/{batch_id}/preview/{index}/{page}` rendering a specific filled output via `render_preview()` to `data/preview_cache/{batch_id}/`. Frontend `app/static/index.html:171-185` adds `#fill-preview` panel with file/page nav; `app/static/app.js:936-948` calls the endpoint after fill completes, caches-busted with `?t=Date.now()`.
+- [x] 4. **Guard chain still passes** — ruff, mypy, 112/112 pytest (no regression from the three fixes above)
+- [x] 5. **Text orientation on rotated pages** — after fix #2, the position was correct but the inserted text was rendered vertical/upside-down on rotated pages because the page's own rotation also rotated the inserted text. `pdf_overlay.py` now passes `rotate=page.rotation` to both `insert_text` and `insert_textbox` so the text is counter-rotated in the unrotated frame and lands horizontal in the visual frame.
+      → `app/services/pdf_overlay.py:48` (`text_rotate = page.rotation`), applied at L53-69. Verified by `tests/test_pdf_overlay.py:100-135` (`test_text_horizontal_on_rotated_page`) which builds pages for all 4 rotations, inserts text, renders, and asserts the rendered text's Y-spread stays within ~2.5× font height (i.e., a single line, not a vertical column). Round-trip verified end-to-end on the user's actual TOG form PDF (Rot 270, mediabox 842×595): "นาย Phillip Dietz" appears horizontal at preview pixel (689, 630) — exactly the click position.
+- [x] 6. **Guard chain still passes** — ruff, mypy, 121/121 pytest (was 112 before fix #5; +8 in `tests/test_rotation.py` for rotation matrix + suggestion conversion, +1 in `tests/test_pdf_overlay.py` for horizontal text on rotated pages)

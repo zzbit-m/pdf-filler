@@ -5,12 +5,13 @@ from pathlib import Path
 import fitz
 from fastapi import APIRouter, HTTPException, UploadFile
 
+from app.config import DATA_BASE
 from app.schemas.models import ExcelUploadResponse, PdfUploadResponse
 from app.services.excel_reader import read_rows, read_unique_values
 
 router = APIRouter(prefix="/upload", tags=["upload"])
 
-UPLOAD_DIR = Path("data/uploads")
+UPLOAD_DIR = DATA_BASE / "uploads"
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 EXCEL_ID_RE = re.compile(r"^[0-9a-f-]+$")

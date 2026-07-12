@@ -34,7 +34,7 @@ class TestTemplateManager:
 
     def test_get_nonexistent(self, templates_dir: Path) -> None:
         mgr = TemplateManager(templates_dir)
-        assert mgr.get("nonexistent") is None
+        assert mgr.get("00000000-0000-0000-0000-000000000000") is None
 
     def test_delete_existing(self, templates_dir: Path) -> None:
         mgr = TemplateManager(templates_dir)
@@ -44,7 +44,7 @@ class TestTemplateManager:
 
     def test_delete_nonexistent(self, templates_dir: Path) -> None:
         mgr = TemplateManager(templates_dir)
-        assert mgr.delete("nonexistent") is False
+        assert mgr.delete("00000000-0000-0000-0000-000000000000") is False
 
     def test_rename_existing(self, templates_dir: Path) -> None:
         mgr = TemplateManager(templates_dir)
@@ -56,7 +56,7 @@ class TestTemplateManager:
 
     def test_rename_nonexistent(self, templates_dir: Path) -> None:
         mgr = TemplateManager(templates_dir)
-        assert mgr.rename("nonexistent", "X") is False
+        assert mgr.rename("00000000-0000-0000-0000-000000000000", "X") is False
 
     def test_duplicate_existing(self, templates_dir: Path) -> None:
         mgr = TemplateManager(templates_dir)
@@ -72,7 +72,7 @@ class TestTemplateManager:
 
     def test_duplicate_nonexistent(self, templates_dir: Path) -> None:
         mgr = TemplateManager(templates_dir)
-        assert mgr.duplicate("nonexistent") is None
+        assert mgr.duplicate("00000000-0000-0000-0000-000000000000") is None
 
     def test_duplicate_custom_name(self, templates_dir: Path) -> None:
         mgr = TemplateManager(templates_dir)

@@ -1,16 +1,20 @@
+import re
 from pathlib import Path
 from typing import Any
 
+import fitz
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import FileResponse
 
+from app.config import DATA_BASE
 from app.services.auto_position import extract_labels, suggest_positions
 from app.services.pdf_preview import render_preview
 
 router = APIRouter(prefix="/preview", tags=["preview"])
 
-UPLOAD_DIR = Path("data/uploads")
-CACHE_DIR = Path("data/preview_cache")
+PDF_ID_RE = re.compile(r"^[0-9a-f-]+$")
+UPLOAD_DIR = DATA_BASE / "uploads"
+CACHE_DIR = DATA_BASE / "preview_cache"
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
 
@@ -18,6 +22,8 @@ CACHE_DIR.mkdir(parents=True, exist_ok=True)
 async def get_suggestions(
     pdf_id: str, page: int, columns: list[str] = Query(...)
 ) -> dict[str, Any]:
+    if not PDF_ID_RE.match(pdf_id):
+        raise HTTPException(400, detail="Invalid PDF ID")
     pdf_path = UPLOAD_DIR / f"{pdf_id}.pdf"
     if not pdf_path.exists():
         raise HTTPException(404, detail="PDF not found")
@@ -41,18 +47,33 @@ async def get_suggestions(
         }
 
     suggestions = suggest_positions(labels, columns, threshold=0.7)
+
+    doc = fitz.open(pdf_path)
+    try:
+        pg = doc[zero_indexed]
+        rot_mat = pg.rotation_matrix
+    finally:
+        doc.close()
+
+    if rot_mat != fitz.Identity:
+        for s in suggestions:
+            pt = fitz.Point(s["x"], s["y"]) * rot_mat
+            s["x"], s["y"] = pt.x, pt.y
+
     return {"suggestions": suggestions, "hint": None}
 
 
 @router.get("/{pdf_id}/{page}")
 async def get_preview(pdf_id: str, page: int) -> FileResponse:
+    if not PDF_ID_RE.match(pdf_id):
+        raise HTTPException(400, detail="Invalid PDF ID")
     pdf_path = UPLOAD_DIR / f"{pdf_id}.pdf"
     if not pdf_path.exists():
         raise HTTPException(404, detail="PDF not found")
 
     zero_indexed = page - 1
     if zero_indexed < 0:
-        raise HTTPException(404, detail="Page out of range")
+        raise HTTPException(400, detail="Page must be >= 1")
 
     page_cache_dir = CACHE_DIR / pdf_id
     page_cache_dir.mkdir(parents=True, exist_ok=True)

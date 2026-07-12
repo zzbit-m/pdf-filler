@@ -1,8 +1,11 @@
 import json
+import re
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+_WORKFLOW_ID_RE = re.compile(r"^[0-9a-f-]+$")
 
 
 class WorkflowManager:
@@ -11,6 +14,8 @@ class WorkflowManager:
         self.workflows_dir.mkdir(parents=True, exist_ok=True)
 
     def _path(self, workflow_id: str) -> Path:
+        if not _WORKFLOW_ID_RE.match(workflow_id):
+            raise ValueError(f"Invalid workflow_id: {workflow_id}")
         return self.workflows_dir / f"{workflow_id}.json"
 
     def save(self, name: str, routing_column: str, routes: list[dict[str, str]]) -> str:

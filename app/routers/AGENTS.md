@@ -7,3 +7,4 @@
 - Template router owns coordinate math (`pixel_to_point` call), not the service layer
 - Preview router converts 1-indexed page URL to 0-indexed (`page - 1`) for fitz — frontend always sends 1-indexed pages
 - Suggest endpoint uses `list[str] = Query(...)` — FastAPI expects repeated `?columns=a&columns=b` params, NOT comma-separated `?columns=a,b`
+- Template save converts display (pixel) coordinates to content (point) coordinates — for rotated pages (Rotate 90/180/270), the transformation must swap x/y and adjust for media box dimensions, not just flip y-axis

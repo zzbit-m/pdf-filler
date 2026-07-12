@@ -20,8 +20,10 @@ const state = {
     previewPageCount: 1,
 };
 
-function api(method, url, data) {
-    const opts = { method, headers: {} };
+function api(method, url, data, timeoutMs = 30000) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    const opts = { method, headers: {}, signal: controller.signal };
     if (data instanceof FormData) {
         opts.body = data;
     } else if (data) {
@@ -29,6 +31,7 @@ function api(method, url, data) {
         opts.body = JSON.stringify(data);
     }
     return fetch(url, opts).then(async r => {
+        clearTimeout(timer);
         if (!r.ok) {
             const err = await r.json().catch(() => ({ detail: r.statusText }));
             throw new Error(err.detail || `HTTP ${r.status}`);
@@ -36,6 +39,10 @@ function api(method, url, data) {
         const ct = r.headers.get('content-type') || '';
         if (ct.includes('application/json')) return r.json();
         return r;
+    }).catch(e => {
+        clearTimeout(timer);
+        if (e.name === 'AbortError') throw new Error('Request timed out');
+        throw e;
     });
 }
 
@@ -152,7 +159,7 @@ function renderPreviewTable(columns, rows) {
     wrapper.innerHTML = html;
 }
 
-function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
 
 function checkStep2Ready() {
     document.getElementById('to-position-btn').disabled = !(state.columns.length && state.pdfId);
@@ -250,15 +257,19 @@ previewWrapper.addEventListener('drop', e => {
     const rawY = (e.clientY - rect.top) * scaleY;
     const pixelX = clamp(rawX, 0, previewImg.naturalWidth);
     const pixelY = clamp(rawY, 0, previewImg.naturalHeight);
+    const fontSize = (state.placedFields.find(f => f.column === column && f.page === state.currentPage) || {}).font_size || 11;
+    const halfTextH = fontSize * 75 / 72;
+    const storedY = clamp(pixelY + halfTextH, 0, previewImg.naturalHeight);
     const existing = state.placedFields.findIndex(f => f.column === column && f.page === state.currentPage);
     if (existing >= 0) {
         state.placedFields[existing].x = pixelX;
-        state.placedFields[existing].y = pixelY;
+        state.placedFields[existing].y = storedY;
     } else {
-        state.placedFields.push({ column: column, page: state.currentPage, x: pixelX, y: pixelY, font_size: 11, max_width: null });
+        state.placedFields.push({ column: column, page: state.currentPage, x: pixelX, y: storedY, font_size: 11, max_width: null });
     }
-    renderMarkers();
+    renderSuggestions();
     renderPlacedFields();
+    renderMarkers();
     updateSaveButton();
 });
 
@@ -276,22 +287,27 @@ function renderMarkers() {
         marker.textContent = f.column;
         marker.style.left = (f.x * scaleX) + 'px';
         marker.style.top = (f.y * scaleY) + 'px';
+        const ptToPx = 150 / 72;
+        const fontSizePx = f.font_size * ptToPx * scaleY;
+        marker.style.fontSize = fontSizePx + 'px';
+        if (f.max_width) {
+            const widthPx = f.max_width * ptToPx * scaleX;
+            marker.style.width = widthPx + 'px';
+            marker.style.whiteSpace = 'normal';
+        }
         marker.draggable = true;
         marker.addEventListener('dragstart', e => {
-            marker._dragged = true;
             e.dataTransfer.setData('text/plain', f.column);
             e.dataTransfer.effectAllowed = 'move';
         });
-        marker.addEventListener('dragend', () => {
-            setTimeout(() => { marker._dragged = false; }, 0);
-        });
         marker.addEventListener('click', () => {
-            if (marker._dragged) return;
             removeField(f.column, f.page);
         });
         wrapper.appendChild(marker);
     });
-    const placedCols = new Set(state.placedFields.map(f => f.column));
+    const placedCols = new Set(
+        state.placedFields.filter(f => f.page === state.currentPage).map(f => f.column)
+    );
     const unchecked = new Set();
     document.querySelectorAll('.sug-cb:not(:checked)').forEach(cb => {
         unchecked.add(cb.dataset.col);
@@ -300,7 +316,7 @@ function renderMarkers() {
         if (placedCols.has(s.column)) return;
         if (unchecked.has(s.column)) return;
         const px = pointToPixel(s.x);
-        const py = img.naturalHeight - pointToPixel(s.y);
+        const py = pointToPixel(s.y);
         const marker = document.createElement('div');
         marker.className = 'marker-suggestion';
         marker.textContent = s.column;
@@ -311,6 +327,7 @@ function renderMarkers() {
 }
 
 previewImg.addEventListener('load', renderMarkers);
+window.addEventListener('resize', renderMarkers);
 
 function renderPlacedFields() {
     const list = document.getElementById('placed-fields-list');
@@ -335,15 +352,22 @@ function renderPlacedFields() {
             val = Math.max(6, Math.min(36, val));
             e.target.value = val;
             const f2 = state.placedFields.find(x => x.column === e.target.dataset.col && x.page === parseInt(e.target.dataset.p));
-            if (f2) f2.font_size = val;
+            if (f2) {
+                f2.font_size = val;
+                renderMarkers();
+            }
         });
         div.querySelector('.f-width').addEventListener('change', e => {
             const val = e.target.value.trim();
             const f2 = state.placedFields.find(x => x.column === e.target.dataset.col && x.page === parseInt(e.target.dataset.p));
-            if (f2) f2.max_width = val ? parseFloat(val) : null;
+            if (f2) {
+                f2.max_width = val ? parseFloat(val) : null;
+                if (f2.max_width !== null && isNaN(f2.max_width)) f2.max_width = null;
+                renderMarkers();
+            }
         });
         div.querySelector('.btn-danger').addEventListener('click', e => {
-            removeField(e.target.dataset.col, parseInt(e.target.dataset.p));
+            removeField(e.currentTarget.dataset.col, parseInt(e.currentTarget.dataset.p));
         });
         list.appendChild(div);
     });
@@ -351,8 +375,9 @@ function renderPlacedFields() {
 
 function removeField(column, page) {
     state.placedFields = state.placedFields.filter(f => !(f.column === column && f.page === page));
-    renderMarkers();
+    renderSuggestions();
     renderPlacedFields();
+    renderMarkers();
     updateSaveButton();
 }
 
@@ -386,7 +411,9 @@ async function fetchSuggestions() {
 
 function renderSuggestions() {
     const list = document.getElementById('suggestion-list');
-    const placedCols = new Set(state.placedFields.map(f => f.column));
+    const placedCols = new Set(
+        state.placedFields.filter(f => f.page === state.currentPage).map(f => f.column)
+    );
     const available = state.suggestions.filter(s => !placedCols.has(s.column));
     if (available.length === 0) {
         list.innerHTML = '<p class="hint">No suggestions for this page.</p>';
@@ -419,7 +446,9 @@ function applySuggestions() {
         checked.add(cb.dataset.col);
     });
     if (checked.size === 0) return;
-    const placedCols = new Set(state.placedFields.map(f => f.column));
+    const placedCols = new Set(
+        state.placedFields.filter(f => f.page === state.currentPage).map(f => f.column)
+    );
     const img = document.getElementById('pdf-preview');
     state.suggestions.forEach(s => {
         if (!checked.has(s.column)) return;
@@ -428,7 +457,7 @@ function applySuggestions() {
             column: s.column,
             page: state.currentPage,
             x: pointToPixel(s.x),
-            y: img.naturalHeight - pointToPixel(s.y),
+            y: pointToPixel(s.y),
             font_size: 11,
             max_width: null,
         });
@@ -578,6 +607,7 @@ async function loadTemplates() {
 
 function renderTemplateGrid(list) {
     const grid = document.getElementById('template-grid');
+    document.getElementById('delete-all-templates').style.display = list.length ? 'inline' : 'none';
     if (!list.length) {
         grid.innerHTML = '<p class="hint">No saved templates yet.</p>';
         return;
@@ -629,8 +659,6 @@ function renderTemplateGrid(list) {
             deleteTemplate(btn.dataset.id);
         });
     });
-
-    document.getElementById('delete-all-templates').style.display = list.length ? 'inline' : 'none';
 }
 
 function selectTemplate(id) {
@@ -785,6 +813,7 @@ async function loadWorkflows() {
 
 function renderWorkflowGrid(list) {
     const grid = document.getElementById('workflow-grid');
+    document.getElementById('delete-all-workflows').style.display = list.length ? 'inline' : 'none';
     if (!list.length) {
         grid.innerHTML = '<p class="hint">No saved workflows yet.</p>';
         return;
@@ -829,8 +858,6 @@ function renderWorkflowGrid(list) {
             deleteWorkflow(btn.dataset.id);
         });
     });
-
-    document.getElementById('delete-all-workflows').style.display = list.length ? 'inline' : 'none';
 }
 
 function selectWorkflow(id) {
@@ -1038,7 +1065,7 @@ document.getElementById('save-workflow-btn').addEventListener('click', async () 
         if (sel.value) {
             const row = sel.closest('tr');
             const valueTd = row.querySelector('td');
-            routes.push({ value: valueTd.textContent, template_id: sel.value });
+            routes.push({ value: valueTd.textContent.trim(), template_id: sel.value });
         }
     });
     if (!routes.length) {

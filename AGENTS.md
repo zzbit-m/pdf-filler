@@ -48,6 +48,7 @@ uv run uvicorn app.main:app --reload
 - Template JSON stores fields as raw dicts, not Pydantic serialization — no type validation on read
 - Excel header row is hardcoded at row 3 (1-indexed) in `excel_reader.py`
 - StaticFiles mounts at `/` with `html=True` — serves index.html on base URL; API routes mounted first so they take precedence
+- Debugging output PDFs: searching raw bytes for ASCII strings fails for CID fonts (Identity-H encoding) — use `page.get_text()` or `doc.xref_stream()` instead
 
 ## Workflow
 

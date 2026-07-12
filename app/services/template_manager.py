@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 PDF_FILE_RE = re.compile(r"^[0-9a-f-]+\.pdf$")
+_TEMPLATE_ID_RE = re.compile(r"^[0-9a-f-]+$")
 
 
 class TemplateManager:
@@ -14,6 +15,8 @@ class TemplateManager:
         self.templates_dir.mkdir(parents=True, exist_ok=True)
 
     def _path(self, template_id: str) -> Path:
+        if not _TEMPLATE_ID_RE.match(template_id):
+            raise ValueError(f"Invalid template_id: {template_id}")
         return self.templates_dir / f"{template_id}.json"
 
     def save(self, name: str, pdf_file: str, fields: list[dict[str, Any]]) -> str:

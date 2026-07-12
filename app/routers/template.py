@@ -5,6 +5,7 @@ import fitz
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
 
+from app.config import DATA_BASE
 from app.schemas.models import (
     TemplateDuplicateRequest,
     TemplateListItem,
@@ -17,9 +18,9 @@ from app.services.template_manager import PDF_FILE_RE, TemplateManager
 
 router = APIRouter(prefix="/template", tags=["template"])
 
-TEMPLATES_DIR = Path("data/templates")
-UPLOAD_DIR = Path("data/uploads")
-PREVIEW_CACHE_DIR = Path("data/preview_cache")
+TEMPLATES_DIR = DATA_BASE / "templates"
+UPLOAD_DIR = DATA_BASE / "uploads"
+PREVIEW_CACHE_DIR = DATA_BASE / "preview_cache"
 manager = TemplateManager(TEMPLATES_DIR)
 
 
@@ -28,26 +29,31 @@ async def save_template(req: TemplateSaveRequest) -> TemplateSaveResponse:
     if not req.fields:
         raise HTTPException(400, detail="At least one field position is required")
 
+    if not PDF_FILE_RE.match(req.pdf_file):
+        raise HTTPException(400, detail="Invalid pdf_file format")
+
     pdf_path = UPLOAD_DIR / req.pdf_file
-    page_heights = {}
+    page_derotation: dict[int, fitz.Matrix] = {}
     if pdf_path.exists():
         doc = fitz.open(pdf_path)
         try:
             for i in range(doc.page_count):
-                page = doc[i]
-                page_heights[i] = page.rect.height
+                page_derotation[i] = doc[i].derotation_matrix
         finally:
             doc.close()
 
     converted = []
     for f in req.fields:
         page_zero = f.page - 1
-        page_h = page_heights.get(page_zero, 842)
+        pt = fitz.Point(pixel_to_point(f.x), pixel_to_point(f.y))
+        derot = page_derotation.get(page_zero, fitz.Identity)
+        pt = pt * derot
+
         converted.append({
             "column": f.column,
             "page": page_zero,
-            "x": pixel_to_point(f.x),
-            "y": page_h - pixel_to_point(f.y),
+            "x": pt.x,
+            "y": pt.y,
             "font_size": f.font_size,
             "max_width": f.max_width,
         })
@@ -70,7 +76,8 @@ async def save_template(req: TemplateSaveRequest) -> TemplateSaveResponse:
 
     template_id = manager.save(name=req.name, pdf_file=req.pdf_file, fields=converted)
     template = manager.get(template_id)
-    assert template is not None
+    if template is None:
+        raise HTTPException(500, detail="Template data not found after save")
 
     return TemplateSaveResponse(
         id=template["id"],
@@ -111,7 +118,8 @@ async def rename_template(template_id: str, req: TemplateRenameRequest) -> Templ
     if not manager.rename(template_id, req.name):
         raise HTTPException(404, detail="Template not found")
     updated = manager.get(template_id)
-    assert updated is not None
+    if updated is None:
+        raise HTTPException(500, detail="Template data not found after rename")
     return TemplateListItem(
         id=updated["id"],
         name=updated["name"],

@@ -94,10 +94,11 @@ def suggest_positions(
 
         if best_col and best_score >= threshold:
             used_columns.add(best_col)
+            cy = (label["y0"] + label["y1"]) / 2
             results.append({
                 "column": best_col,
                 "x": label["x1"] + 8,
-                "y": label["y0"],
+                "y": cy,
                 "confidence": round(best_score, 3),
             })
 

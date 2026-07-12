@@ -1,8 +1,8 @@
-from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
 
+from app.config import DATA_BASE
 from app.schemas.models import (
     TemplateRenameRequest,
     WorkflowListItem,
@@ -14,8 +14,8 @@ from app.services.workflow_manager import WorkflowManager
 
 router = APIRouter(prefix="/workflow", tags=["workflow"])
 
-TEMPLATES_DIR = Path("data/templates")
-WORKFLOWS_DIR = Path("data/workflows")
+TEMPLATES_DIR = DATA_BASE / "templates"
+WORKFLOWS_DIR = DATA_BASE / "workflows"
 workflow_mgr = WorkflowManager(WORKFLOWS_DIR)
 template_mgr = TemplateManager(TEMPLATES_DIR)
 
@@ -35,7 +35,8 @@ async def create_workflow(req: WorkflowSaveRequest) -> WorkflowSaveResponse:
         name=req.name, routing_column=req.routing_column, routes=routes
     )
     workflow = workflow_mgr.get(workflow_id)
-    assert workflow is not None
+    if workflow is None:
+        raise HTTPException(500, detail="Workflow data not found after save")
     return WorkflowSaveResponse(
         id=workflow["id"],
         name=workflow["name"],
@@ -78,7 +79,8 @@ async def rename_workflow(
     if not workflow_mgr.rename(workflow_id, req.name):
         raise HTTPException(404, detail="Workflow not found")
     updated = workflow_mgr.get(workflow_id)
-    assert updated is not None
+    if updated is None:
+        raise HTTPException(500, detail="Workflow data not found after rename")
     return WorkflowListItem(
         id=updated["id"],
         name=updated["name"],

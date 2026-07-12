@@ -15,7 +15,7 @@ class PdfUploadResponse(BaseModel):
 
 class TemplateField(BaseModel):
     column: str
-    page: int = 0
+    page: int = Field(default=1, ge=1)
     x: float
     y: float
     font_size: float = Field(default=11, ge=6, le=36)

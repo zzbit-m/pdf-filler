@@ -1,10 +1,10 @@
 import io
-from pathlib import Path
 
 import fitz
 import openpyxl
 from fastapi.testclient import TestClient
 
+from app.config import DATA_BASE
 from app.main import app
 from app.routers.fill import fill_state
 
@@ -67,12 +67,12 @@ class TestExcelUpload:
 class TestPdfUpload:
     def test_upload_pdf_success(self):
         content = _create_pdf()
-        resp = client.post("/upload/pdf", files={"file": ("test.pdf", content, "application/pdf")})
+        resp = client.post("/upload/pdf", files={"file": ("a.pdf", content, "application/pdf")})
         assert resp.status_code == 200
         data = resp.json()
         assert "pdf_id" in data
         assert data["page_count"] == 1
-        assert data["filename"] == "test.pdf"
+        assert data["filename"] == "a.pdf"
 
     def test_wrong_file_type(self):
         resp = client.post("/upload/pdf", files={"file": ("test.txt", b"hello", "text/plain")})
@@ -99,7 +99,7 @@ class TestPreview:
         pdf_content = _create_pdf()
         upload_resp = client.post(
             "/upload/pdf",
-            files={"file": ("test.pdf", pdf_content, "application/pdf")},
+            files={"file": ("a.pdf", pdf_content, "application/pdf")},
         )
         pdf_id = upload_resp.json()["pdf_id"]
 
@@ -108,14 +108,14 @@ class TestPreview:
         assert resp.headers["content-type"] == "image/png"
 
     def test_pdf_not_found(self):
-        resp = client.get("/preview/nonexistent/1")
+        resp = client.get("/preview/00000000-0000-0000-0000-000000000000/1")
         assert resp.status_code == 404
 
     def test_page_out_of_range(self):
         pdf_content = _create_pdf()
         upload_resp = client.post(
             "/upload/pdf",
-            files={"file": ("test.pdf", pdf_content, "application/pdf")},
+            files={"file": ("a.pdf", pdf_content, "application/pdf")},
         )
         pdf_id = upload_resp.json()["pdf_id"]
 
@@ -128,7 +128,7 @@ class TestTemplate:
         fields = [{"column": "Name", "page": 1, "x": 100, "y": 200, "font_size": 11}]
         resp = client.post(
             "/template",
-            json={"name": "Test", "pdf_file": "test.pdf", "fields": fields},
+            json={"name": "Test", "pdf_file": "a.pdf", "fields": fields},
         )
         assert resp.status_code == 200
         data = resp.json()
@@ -144,7 +144,7 @@ class TestTemplate:
     def test_save_no_fields(self):
         resp = client.post(
             "/template",
-            json={"name": "Empty", "pdf_file": "test.pdf", "fields": []},
+            json={"name": "Empty", "pdf_file": "a.pdf", "fields": []},
         )
         assert resp.status_code == 400
 
@@ -152,7 +152,7 @@ class TestTemplate:
         fields = [{"column": "Name", "page": 1, "x": 100, "y": 200, "font_size": 11}]
         create_resp = client.post(
             "/template",
-            json={"name": "GetDel", "pdf_file": "test.pdf", "fields": fields},
+            json={"name": "GetDel", "pdf_file": "a.pdf", "fields": fields},
         )
         tid = create_resp.json()["id"]
 
@@ -167,11 +167,11 @@ class TestTemplate:
         assert get_resp2.status_code == 404
 
     def test_get_not_found(self):
-        resp = client.get("/template/nonexistent")
+        resp = client.get("/template/00000000-0000-0000-0000-000000000000")
         assert resp.status_code == 404
 
     def test_delete_not_found(self):
-        resp = client.delete("/template/nonexistent")
+        resp = client.delete("/template/00000000-0000-0000-0000-000000000000")
         assert resp.status_code == 404
 
     def test_overlap_warning(self):
@@ -181,7 +181,7 @@ class TestTemplate:
         ]
         resp = client.post(
             "/template",
-            json={"name": "Overlap", "pdf_file": "test.pdf", "fields": fields},
+            json={"name": "Overlap", "pdf_file": "a.pdf", "fields": fields},
         )
         assert resp.status_code == 200
         assert len(resp.json()["warnings"]) > 0
@@ -193,7 +193,7 @@ class TestTemplate:
         ]
         resp = client.post(
             "/template",
-            json={"name": "NoOverlap", "pdf_file": "test.pdf", "fields": fields},
+            json={"name": "NoOverlap", "pdf_file": "a.pdf", "fields": fields},
         )
         assert resp.status_code == 200
         assert len(resp.json()["warnings"]) == 0
@@ -202,7 +202,7 @@ class TestTemplate:
         fields = [{"column": "Name", "page": 1, "x": 100, "y": 200, "font_size": 11}]
         create = client.post(
             "/template",
-            json={"name": "Old", "pdf_file": "test.pdf", "fields": fields},
+            json={"name": "Old", "pdf_file": "a.pdf", "fields": fields},
         )
         tid = create.json()["id"]
 
@@ -214,14 +214,14 @@ class TestTemplate:
         assert get.json()["name"] == "Renamed"
 
     def test_rename_template_404(self):
-        resp = client.put("/template/nonexistent", json={"name": "X"})
+        resp = client.put("/template/00000000-0000-0000-0000-000000000000", json={"name": "X"})
         assert resp.status_code == 404
 
     def test_duplicate_template(self):
         fields = [{"column": "Name", "page": 1, "x": 100, "y": 200, "font_size": 11}]
         create = client.post(
             "/template",
-            json={"name": "Original", "pdf_file": "test.pdf", "fields": fields},
+            json={"name": "Original", "pdf_file": "a.pdf", "fields": fields},
         )
         tid = create.json()["id"]
 
@@ -233,14 +233,14 @@ class TestTemplate:
         assert data["field_count"] == 1
 
     def test_duplicate_template_404(self):
-        resp = client.post("/template/nonexistent/duplicate", json={})
+        resp = client.post("/template/00000000-0000-0000-0000-000000000000/duplicate", json={})
         assert resp.status_code == 404
 
     def test_thumbnail(self):
         pdf_content = _create_pdf()
         pdf_resp = client.post(
             "/upload/pdf",
-            files={"file": ("test.pdf", pdf_content, "application/pdf")},
+            files={"file": ("a.pdf", pdf_content, "application/pdf")},
         )
         pdf_id = pdf_resp.json()["pdf_id"]
 
@@ -259,7 +259,7 @@ class TestTemplate:
         fields = [{"column": "Name", "page": 1, "x": 100, "y": 200, "font_size": 11}]
         create = client.post(
             "/template",
-            json={"name": "NoPdf", "pdf_file": "nonexistent.pdf", "fields": fields},
+            json={"name": "NoPdf", "pdf_file": "b.pdf", "fields": fields},
         )
         tid = create.json()["id"]
         resp = client.get(f"/template/{tid}/thumbnail")
@@ -267,13 +267,11 @@ class TestTemplate:
 
     def test_thumbnail_invalid_pdf_file(self):
         fields = [{"column": "Name", "page": 1, "x": 100, "y": 200, "font_size": 11}]
-        create = client.post(
+        resp = client.post(
             "/template",
             json={"name": "BadPdfRef", "pdf_file": "../../etc/passwd", "fields": fields},
         )
-        tid = create.json()["id"]
-        resp = client.get(f"/template/{tid}/thumbnail")
-        assert resp.status_code == 404
+        assert resp.status_code == 400
 
 
 class TestFill:
@@ -322,7 +320,7 @@ class TestFill:
         excel_content = _create_excel(["Name"], [["Alice"]])
         resp = client.post(
             "/fill",
-            params={"template_id": "nonexistent"},
+            params={"template_id": "00000000-0000-0000-0000-000000000000"},
             files={"file": ("data.xlsx", excel_content, XLSX_MIME)},
         )
         assert resp.status_code == 404
@@ -349,11 +347,11 @@ class TestFill:
         assert len(resp.json()["warnings"]) > 0
 
     def test_status_not_found(self):
-        resp = client.get("/fill/nonexistent/status")
+        resp = client.get("/fill/00000000-0000-0000-0000-000000000000/status")
         assert resp.status_code == 404
 
     def test_download_not_found(self):
-        resp = client.get("/fill/nonexistent/download")
+        resp = client.get("/fill/00000000-0000-0000-0000-000000000000/download")
         assert resp.status_code == 404
 
     def test_download_not_completed(self):
@@ -374,7 +372,7 @@ class TestFill:
             json={"name": "ErrTest", "pdf_file": f"{pdf_id}.pdf", "fields": fields},
         )
         template_id = tmpl_resp.json()["id"]
-        Path("data/uploads", f"{pdf_id}.pdf").unlink()
+        (DATA_BASE / "uploads" / f"{pdf_id}.pdf").unlink()
         excel_content = _create_excel(["Name"], [["Alice"]])
         fill_resp = client.post(
             "/fill",
@@ -395,7 +393,7 @@ class TestWorkflow:
         fields = [{"column": "Name", "page": 1, "x": 100, "y": 200, "font_size": 11}]
         tmpl = client.post(
             "/template",
-            json={"name": "WF Tmpl", "pdf_file": "test.pdf", "fields": fields},
+            json={"name": "WF Tmpl", "pdf_file": "a.pdf", "fields": fields},
         )
         tid = tmpl.json()["id"]
 
@@ -414,7 +412,7 @@ class TestWorkflow:
         fields = [{"column": "Name", "page": 1, "x": 100, "y": 200, "font_size": 11}]
         tmpl = client.post(
             "/template",
-            json={"name": "WF Dup", "pdf_file": "test.pdf", "fields": fields},
+            json={"name": "WF Dup", "pdf_file": "a.pdf", "fields": fields},
         )
         tid = tmpl.json()["id"]
 
@@ -438,7 +436,7 @@ class TestWorkflow:
         fields = [{"column": "Name", "page": 1, "x": 100, "y": 200, "font_size": 11}]
         tmpl = client.post(
             "/template",
-            json={"name": "WF List", "pdf_file": "test.pdf", "fields": fields},
+            json={"name": "WF List", "pdf_file": "a.pdf", "fields": fields},
         )
         tid = tmpl.json()["id"]
         client.post("/workflow", json={
@@ -457,7 +455,7 @@ class TestWorkflow:
         fields = [{"column": "Name", "page": 1, "x": 100, "y": 200, "font_size": 11}]
         tmpl = client.post(
             "/template",
-            json={"name": "WF Get", "pdf_file": "test.pdf", "fields": fields},
+            json={"name": "WF Get", "pdf_file": "a.pdf", "fields": fields},
         )
         tid = tmpl.json()["id"]
         create = client.post("/workflow", json={
@@ -474,14 +472,14 @@ class TestWorkflow:
         assert data["routes"][0]["template_name"] == "WF Get"
 
     def test_get_workflow_404(self):
-        resp = client.get("/workflow/nonexistent")
+        resp = client.get("/workflow/00000000-0000-0000-0000-000000000000")
         assert resp.status_code == 404
 
     def test_rename_workflow(self):
         fields = [{"column": "Name", "page": 1, "x": 100, "y": 200, "font_size": 11}]
         tmpl = client.post(
             "/template",
-            json={"name": "WF Ren", "pdf_file": "test.pdf", "fields": fields},
+            json={"name": "WF Ren", "pdf_file": "a.pdf", "fields": fields},
         )
         tid = tmpl.json()["id"]
         create = client.post("/workflow", json={
@@ -498,7 +496,7 @@ class TestWorkflow:
         fields = [{"column": "Name", "page": 1, "x": 100, "y": 200, "font_size": 11}]
         tmpl = client.post(
             "/template",
-            json={"name": "WF Del", "pdf_file": "test.pdf", "fields": fields},
+            json={"name": "WF Del", "pdf_file": "a.pdf", "fields": fields},
         )
         tid = tmpl.json()["id"]
         create = client.post("/workflow", json={
@@ -580,7 +578,7 @@ class TestWorkflow:
         fields = [{"column": "Name", "page": 1, "x": 100, "y": 200, "font_size": 11}]
         tmpl = client.post(
             "/template",
-            json={"name": "WF Col", "pdf_file": "test.pdf", "fields": fields},
+            json={"name": "WF Col", "pdf_file": "a.pdf", "fields": fields},
         )
         tid = tmpl.json()["id"]
         wf = client.post("/workflow", json={
@@ -602,7 +600,7 @@ class TestWorkflow:
         excel = _create_excel(["Name"], [["Alice"]])
         resp = client.post(
             "/fill/workflow",
-            params={"workflow_id": "nonexistent"},
+            params={"workflow_id": "00000000-0000-0000-0000-000000000000"},
             files={"file": ("data.xlsx", excel, XLSX_MIME)},
         )
         assert resp.status_code == 404
@@ -611,7 +609,7 @@ class TestWorkflow:
         fields = [{"column": "Name", "page": 1, "x": 100, "y": 200, "font_size": 11}]
         tmpl = client.post(
             "/template",
-            json={"name": "WF NoR", "pdf_file": "test.pdf", "fields": fields},
+            json={"name": "WF NoR", "pdf_file": "a.pdf", "fields": fields},
         )
         tid = tmpl.json()["id"]
         create = client.post("/workflow", json={
@@ -625,7 +623,7 @@ class TestWorkflow:
         workflow_data = client.get(f"/workflow/{wid}").json()
         workflow_data["routes"] = []
         import json
-        Path("data/workflows", f"{wid}.json").write_text(
+        (DATA_BASE / "workflows" / f"{wid}.json").write_text(
             json.dumps(workflow_data, ensure_ascii=False, indent=2), encoding="utf-8",
         )
 
