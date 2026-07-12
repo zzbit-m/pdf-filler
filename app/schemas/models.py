@@ -20,6 +20,8 @@ class TemplateField(BaseModel):
     y: float
     font_size: float = Field(default=11, ge=6, le=36)
     max_width: float | None = None
+    type: str = "column"
+    text_value: str = ""
 
 
 class TemplateSaveRequest(BaseModel):
@@ -55,6 +57,14 @@ class TemplateDuplicateRequest(BaseModel):
     name: str | None = None
 
 
+class AdjustFieldRequest(BaseModel):
+    column: str
+    page: int = Field(ge=1)
+    font_size: float | None = None
+    x: float | None = None
+    y: float | None = None
+
+
 class FillStartResponse(BaseModel):
     batch_id: str
     warnings: list[str] = []
@@ -69,29 +79,3 @@ class FillStatusResponse(BaseModel):
     warnings: list[str] = []
     files: list[str] = []
 
-
-class RouteEntry(BaseModel):
-    value: str = Field(min_length=1)
-    template_id: str = Field(min_length=1)
-
-
-class WorkflowSaveRequest(BaseModel):
-    name: str = Field(min_length=1, max_length=200)
-    routing_column: str = Field(min_length=1)
-    routes: list[RouteEntry] = Field(min_length=1)
-
-
-class WorkflowSaveResponse(BaseModel):
-    id: str
-    name: str
-    routing_column: str
-    route_count: int
-    created_at: str
-
-
-class WorkflowListItem(BaseModel):
-    id: str
-    name: str
-    routing_column: str
-    route_count: int
-    created_at: str

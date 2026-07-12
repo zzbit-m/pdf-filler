@@ -8,16 +8,14 @@ const state = {
     templateId: null,
     batchId: null,
     polling: false,
-    suggestions: [],
     templates: [],
-    workflowMode: 'single',
-    workflowId: null,
-    workflowExcelId: null,
-    workflowRoutingColumn: null,
     batchFiles: [],
     previewIndex: 1,
     previewPage: 1,
     previewPageCount: 1,
+    textBlockCounter: 0,
+    fillFields: [],
+    selectedField: null,
 };
 
 function api(method, url, data, timeoutMs = 30000) {
@@ -121,6 +119,11 @@ document.getElementById('pdf-input').addEventListener('change', async e => {
         showMsg('pdf-status', 'Loaded: ' + data.filename + ' (' + data.page_count + ' page' + (data.page_count > 1 ? 's' : '') + ')', 'ok');
         document.getElementById('pdf-details').textContent = 'Pages: ' + data.page_count + ' | Filename: ' + data.filename;
         document.getElementById('pdf-info').style.display = 'block';
+        const previewImg = document.getElementById('pdf-upload-preview');
+        if (previewImg) {
+            previewImg.onerror = () => { document.getElementById('pdf-upload-preview-wrapper').classList.add('no-preview'); };
+            previewImg.src = '/preview/' + data.pdf_id + '/1?t=' + Date.now();
+        }
         checkStep2Ready();
     } catch (err) {
         showMsg('pdf-status', err.message, 'error');
@@ -192,11 +195,9 @@ function enterStep2() {
         container.appendChild(tag);
     });
     document.getElementById('template-name-input').value = '';
-    state.suggestions = [];
     renderPlacedFields();
     updateSaveButton();
     loadPreview(state.currentPage);
-    fetchSuggestions();
 }
 
 function loadPreview(page) {
@@ -211,7 +212,6 @@ document.getElementById('prev-page').addEventListener('click', () => {
         state.currentPage--;
         loadPreview(state.currentPage);
         setTimeout(renderMarkers, 100);
-        fetchSuggestions();
     }
 });
 
@@ -220,7 +220,6 @@ document.getElementById('next-page').addEventListener('click', () => {
         state.currentPage++;
         loadPreview(state.currentPage);
         setTimeout(renderMarkers, 100);
-        fetchSuggestions();
     }
 });
 
@@ -248,7 +247,8 @@ previewWrapper.addEventListener('drop', e => {
     previewWrapper.classList.remove('drag-over');
     const column = e.dataTransfer.getData('text/plain');
     if (!column) return;
-    if (!state.columns.includes(column)) return;
+    const existingField = state.placedFields.find(f => f.column === column && f.page === state.currentPage);
+    if (!existingField && !state.columns.includes(column)) return;
     if (!previewImg.naturalWidth) return;
     const rect = previewImg.getBoundingClientRect();
     const scaleX = previewImg.naturalWidth / previewImg.clientWidth;
@@ -257,9 +257,7 @@ previewWrapper.addEventListener('drop', e => {
     const rawY = (e.clientY - rect.top) * scaleY;
     const pixelX = clamp(rawX, 0, previewImg.naturalWidth);
     const pixelY = clamp(rawY, 0, previewImg.naturalHeight);
-    const fontSize = (state.placedFields.find(f => f.column === column && f.page === state.currentPage) || {}).font_size || 11;
-    const halfTextH = fontSize * 75 / 72;
-    const storedY = clamp(pixelY + halfTextH, 0, previewImg.naturalHeight);
+    const storedY = clamp(pixelY, 0, previewImg.naturalHeight);
     const existing = state.placedFields.findIndex(f => f.column === column && f.page === state.currentPage);
     if (existing >= 0) {
         state.placedFields[existing].x = pixelX;
@@ -267,7 +265,6 @@ previewWrapper.addEventListener('drop', e => {
     } else {
         state.placedFields.push({ column: column, page: state.currentPage, x: pixelX, y: storedY, font_size: 11, max_width: null });
     }
-    renderSuggestions();
     renderPlacedFields();
     renderMarkers();
     updateSaveButton();
@@ -275,7 +272,7 @@ previewWrapper.addEventListener('drop', e => {
 
 function renderMarkers() {
     const wrapper = document.getElementById('preview-wrapper');
-    wrapper.querySelectorAll('.marker, .marker-suggestion').forEach(el => el.remove());
+    wrapper.querySelectorAll('.marker').forEach(el => el.remove());
     const img = previewImg;
     if (!img.naturalWidth) return;
     const scaleX = img.clientWidth / img.naturalWidth;
@@ -283,8 +280,8 @@ function renderMarkers() {
     const pageFields = state.placedFields.filter(f => f.page === state.currentPage);
     pageFields.forEach(f => {
         const marker = document.createElement('div');
-        marker.className = 'marker';
-        marker.textContent = f.column;
+        marker.className = f.type === 'text' ? 'marker marker-text' : 'marker';
+        marker.textContent = f.type === 'text' ? (f.text_value || f.column) : f.column;
         marker.style.left = (f.x * scaleX) + 'px';
         marker.style.top = (f.y * scaleY) + 'px';
         const ptToPx = 150 / 72;
@@ -305,25 +302,6 @@ function renderMarkers() {
         });
         wrapper.appendChild(marker);
     });
-    const placedCols = new Set(
-        state.placedFields.filter(f => f.page === state.currentPage).map(f => f.column)
-    );
-    const unchecked = new Set();
-    document.querySelectorAll('.sug-cb:not(:checked)').forEach(cb => {
-        unchecked.add(cb.dataset.col);
-    });
-    state.suggestions.forEach(s => {
-        if (placedCols.has(s.column)) return;
-        if (unchecked.has(s.column)) return;
-        const px = pointToPixel(s.x);
-        const py = pointToPixel(s.y);
-        const marker = document.createElement('div');
-        marker.className = 'marker-suggestion';
-        marker.textContent = s.column;
-        marker.style.left = (px * scaleX) + 'px';
-        marker.style.top = (py * scaleY) + 'px';
-        wrapper.appendChild(marker);
-    });
 }
 
 previewImg.addEventListener('load', renderMarkers);
@@ -341,12 +319,22 @@ function renderPlacedFields() {
         div.className = 'placed-field';
         const sz = f.font_size || 11;
         const mw = f.max_width || '';
-        div.innerHTML =
-            '<span class="field-name">' + esc(f.column) + '</span>' +
-            '<span style="font-size:10px;color:#888;">p' + f.page + '</span>' +
-            '<label>Sz</label><input type="number" class="f-size" value="' + sz + '" min="6" max="36" data-col="' + esc(f.column) + '" data-p="' + f.page + '">' +
-            '<label>W</label><input type="text" class="f-width" value="' + mw + '" placeholder="auto" data-col="' + esc(f.column) + '" data-p="' + f.page + '">' +
-            '<button class="btn-danger btn-small" data-col="' + esc(f.column) + '" data-p="' + f.page + '">\u2715</button>';
+        if (f.type === 'text') {
+            div.innerHTML =
+                '<span class="field-name">' + esc(f.column) + '</span>' +
+                '<span class="badge-text">Tx</span>' +
+                '<span style="font-size:10px;color:#888;margin-left:2px;">All</span>' +
+                '<label>Text</label><input type="text" class="text-value-input" value="' + esc(f.text_value || '') + '" data-col="' + esc(f.column) + '" data-p="' + f.page + '">' +
+                '<label>Sz</label><input type="number" class="f-size" value="' + sz + '" min="6" max="36" data-col="' + esc(f.column) + '" data-p="' + f.page + '">' +
+                '<button class="btn-danger btn-small" data-col="' + esc(f.column) + '" data-p="' + f.page + '">\u2715</button>';
+        } else {
+            div.innerHTML =
+                '<span class="field-name">' + esc(f.column) + '</span>' +
+                '<span style="font-size:10px;color:#888;">p' + f.page + '</span>' +
+                '<label>Sz</label><input type="number" class="f-size" value="' + sz + '" min="6" max="36" data-col="' + esc(f.column) + '" data-p="' + f.page + '">' +
+                '<label>W</label><input type="text" class="f-width" value="' + mw + '" placeholder="auto" data-col="' + esc(f.column) + '" data-p="' + f.page + '">' +
+                '<button class="btn-danger btn-small" data-col="' + esc(f.column) + '" data-p="' + f.page + '">\u2715</button>';
+        }
         div.querySelector('.f-size').addEventListener('change', e => {
             let val = parseInt(e.target.value) || 11;
             val = Math.max(6, Math.min(36, val));
@@ -357,15 +345,28 @@ function renderPlacedFields() {
                 renderMarkers();
             }
         });
-        div.querySelector('.f-width').addEventListener('change', e => {
-            const val = e.target.value.trim();
-            const f2 = state.placedFields.find(x => x.column === e.target.dataset.col && x.page === parseInt(e.target.dataset.p));
-            if (f2) {
-                f2.max_width = val ? parseFloat(val) : null;
-                if (f2.max_width !== null && isNaN(f2.max_width)) f2.max_width = null;
-                renderMarkers();
-            }
-        });
+        const widthInput = div.querySelector('.f-width');
+        if (widthInput) {
+            widthInput.addEventListener('change', e => {
+                const val = e.target.value.trim();
+                const f2 = state.placedFields.find(x => x.column === e.target.dataset.col && x.page === parseInt(e.target.dataset.p));
+                if (f2) {
+                    f2.max_width = val ? parseFloat(val) : null;
+                    if (f2.max_width !== null && isNaN(f2.max_width)) f2.max_width = null;
+                    renderMarkers();
+                }
+            });
+        }
+        const textInput = div.querySelector('.text-value-input');
+        if (textInput) {
+            textInput.addEventListener('change', e => {
+                const f2 = state.placedFields.find(x => x.column === e.target.dataset.col && x.page === parseInt(e.target.dataset.p));
+                if (f2) {
+                    f2.text_value = e.target.value;
+                    renderMarkers();
+                }
+            });
+        }
         div.querySelector('.btn-danger').addEventListener('click', e => {
             removeField(e.currentTarget.dataset.col, parseInt(e.currentTarget.dataset.p));
         });
@@ -375,7 +376,6 @@ function renderPlacedFields() {
 
 function removeField(column, page) {
     state.placedFields = state.placedFields.filter(f => !(f.column === column && f.page === page));
-    renderSuggestions();
     renderPlacedFields();
     renderMarkers();
     updateSaveButton();
@@ -385,91 +385,6 @@ function updateSaveButton() {
     const btn = document.getElementById('save-template-btn');
     btn.disabled = state.placedFields.length === 0;
 }
-
-// ======== AUTO-POSITION SUGGESTIONS ========
-
-async function fetchSuggestions() {
-    if (!state.pdfId || !state.columns.length) return;
-    const el = document.getElementById('suggestion-status');
-    el.style.display = 'none';
-    document.getElementById('apply-suggestions-btn').disabled = true;
-    const params = state.columns.map(c => 'columns=' + encodeURIComponent(c)).join('&');
-    const url = '/preview/suggest/' + state.pdfId + '/' + state.currentPage + '?' + params;
-    try {
-        const data = await api('GET', url);
-        state.suggestions = data.suggestions || [];
-        if (data.hint) {
-            showMsg('suggestion-status', data.hint, 'warning');
-        }
-        renderSuggestions();
-    } catch (err) {
-        state.suggestions = [];
-        renderSuggestions();
-        showMsg('suggestion-status', err.message, 'error');
-    }
-}
-
-function renderSuggestions() {
-    const list = document.getElementById('suggestion-list');
-    const placedCols = new Set(
-        state.placedFields.filter(f => f.page === state.currentPage).map(f => f.column)
-    );
-    const available = state.suggestions.filter(s => !placedCols.has(s.column));
-    if (available.length === 0) {
-        list.innerHTML = '<p class="hint">No suggestions for this page.</p>';
-        document.getElementById('apply-suggestions-btn').disabled = true;
-        renderMarkers();
-        return;
-    }
-    let html = '';
-    let allChecked = true;
-    available.forEach(s => {
-        const badgeClass = s.confidence >= 0.9 ? 'conf-high' : s.confidence >= 0.7 ? 'conf-mid' : 'conf-low';
-        const pct = Math.round(s.confidence * 100);
-        html += '<div class="suggestion-item">' +
-            '<input type="checkbox" class="sug-cb" data-col="' + esc(s.column) + '" checked>' +
-            '<label>' + esc(s.column) + '</label>' +
-            '<span class="conf-badge ' + badgeClass + '">' + pct + '%</span>' +
-            '</div>';
-    });
-    list.innerHTML = html;
-    document.getElementById('apply-suggestions-btn').disabled = false;
-    list.querySelectorAll('.sug-cb').forEach(cb => {
-        cb.addEventListener('change', renderMarkers);
-    });
-    renderMarkers();
-}
-
-function applySuggestions() {
-    const checked = new Set();
-    document.querySelectorAll('.sug-cb:checked').forEach(cb => {
-        checked.add(cb.dataset.col);
-    });
-    if (checked.size === 0) return;
-    const placedCols = new Set(
-        state.placedFields.filter(f => f.page === state.currentPage).map(f => f.column)
-    );
-    const img = document.getElementById('pdf-preview');
-    state.suggestions.forEach(s => {
-        if (!checked.has(s.column)) return;
-        if (placedCols.has(s.column)) return;
-        state.placedFields.push({
-            column: s.column,
-            page: state.currentPage,
-            x: pointToPixel(s.x),
-            y: pointToPixel(s.y),
-            font_size: 11,
-            max_width: null,
-        });
-        placedCols.add(s.column);
-    });
-    state.suggestions = [];
-    renderSuggestions();
-    renderPlacedFields();
-    updateSaveButton();
-}
-
-document.getElementById('apply-suggestions-btn').addEventListener('click', applySuggestions);
 
 document.getElementById('save-template-btn').addEventListener('click', async () => {
     const name = document.getElementById('template-name-input').value.trim();
@@ -487,6 +402,8 @@ document.getElementById('save-template-btn').addEventListener('click', async () 
             y: Math.round(f.y),
             font_size: f.font_size,
             max_width: f.max_width,
+            type: f.type || 'column',
+            text_value: f.text_value || '',
         })),
     };
     try {
@@ -524,10 +441,35 @@ document.getElementById('pdf-clear').addEventListener('click', () => {
     document.getElementById('pdf-clear').style.display = 'none';
     document.getElementById('pdf-status').style.display = 'none';
     document.getElementById('pdf-info').style.display = 'none';
+    document.getElementById('pdf-upload-preview').src = '';
     document.querySelector('.upload-card:last-child').classList.remove('file-loaded');
     state.pdfId = null;
     state.pageCount = 0;
     checkStep2Ready();
+});
+
+document.getElementById('add-text-block-btn').addEventListener('click', () => {
+    const input = document.getElementById('text-block-input');
+    const text = input.value.trim();
+    if (!text) return;
+    const img = document.getElementById('pdf-preview');
+    const centerX = img.naturalWidth ? Math.round(img.naturalWidth / 2) : 300;
+    const centerY = img.naturalHeight ? Math.round(img.naturalHeight / 2) : 400;
+    state.textBlockCounter++;
+    state.placedFields.push({
+        column: 'Text ' + state.textBlockCounter,
+        page: state.currentPage,
+        x: centerX,
+        y: centerY,
+        font_size: 11,
+        max_width: null,
+        type: 'text',
+        text_value: text,
+    });
+    input.value = '';
+    renderPlacedFields();
+    renderMarkers();
+    updateSaveButton();
 });
 
 document.getElementById('fill-excel-clear').addEventListener('click', () => {
@@ -538,40 +480,10 @@ document.getElementById('fill-excel-clear').addEventListener('click', () => {
     checkFillReady();
 });
 
-document.getElementById('workflow-excel-clear').addEventListener('click', () => {
-    document.getElementById('workflow-excel-input').value = '';
-    document.getElementById('workflow-excel-file-name').textContent = 'No file chosen';
-    document.getElementById('workflow-excel-clear').style.display = 'none';
-    document.getElementById('workflow-routing-preview').style.display = 'none';
-    state.workflowExcelId = null;
-});
-
-document.getElementById('workflow-excel-data-clear').addEventListener('click', () => {
-    document.getElementById('workflow-excel-data-input').value = '';
-    document.getElementById('workflow-excel-data-file-name').textContent = 'No file chosen';
-    document.getElementById('workflow-excel-data-clear').style.display = 'none';
-    document.getElementById('workflow-fill-excel-status').style.display = 'none';
-    checkWorkflowFillReady();
-});
-
 // ======== STEP 3: GENERATE ========
-
-document.getElementById('tab-btn-single').addEventListener('click', () => switchStep3Tab('single'));
-document.getElementById('tab-btn-workflow').addEventListener('click', () => switchStep3Tab('workflow'));
-
-function switchStep3Tab(tab) {
-    state.workflowMode = tab;
-    document.querySelectorAll('.step3-tab').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
-    document.getElementById('tab-single').classList.toggle('active', tab === 'single');
-    document.getElementById('tab-workflow').classList.toggle('active', tab === 'workflow');
-    document.getElementById('fill-progress').style.display = 'none';
-    document.getElementById('fill-done').style.display = 'none';
-    document.getElementById('fill-error').style.display = 'none';
-}
 
 async function enterStep3() {
     await loadTemplates();
-    await loadWorkflows();
     document.getElementById('fill-excel-input').value = '';
     document.getElementById('fill-excel-file-name').textContent = 'No file chosen';
     document.getElementById('fill-excel-status').style.display = 'none';
@@ -580,14 +492,6 @@ async function enterStep3() {
     document.getElementById('fill-done').style.display = 'none';
     document.getElementById('fill-error').style.display = 'none';
     document.getElementById('start-fill-btn').disabled = true;
-    document.getElementById('start-workflow-fill-btn').disabled = true;
-    state.workflowId = null;
-    state.workflowExcelId = null;
-    state.workflowRoutingColumn = null;
-    resetWorkflowBuilder();
-    if (state.workflowMode === 'single') {
-        switchStep3Tab('single');
-    }
     if (state.templateId) {
         selectTemplate(state.templateId);
         checkFillReady();
@@ -772,9 +676,8 @@ function startPolling(batchId) {
                 document.getElementById('fill-done').style.display = 'block';
                 document.getElementById('download-link').href = '/fill/' + batchId + '/download';
                 document.getElementById('start-fill-btn').disabled = false;
-                document.getElementById('start-workflow-fill-btn').disabled = false;
                 if (data.warnings && data.warnings.length) {
-                    const w = document.getElementById('workflow-fill-warnings');
+                    const w = document.getElementById('fill-warnings');
                     w.innerHTML = '<strong>Batch warnings:</strong><br>' + data.warnings.join('<br>');
                     w.style.display = 'block';
                 }
@@ -798,143 +701,6 @@ function startPolling(batchId) {
     }
     setTimeout(poll, 500);
 }
-
-// ======== WORKFLOW ========
-
-async function loadWorkflows() {
-    try {
-        const list = await api('GET', '/workflow/list');
-        renderWorkflowGrid(list);
-    } catch (err) {
-        console.error('Failed to load workflows:', err);
-        document.getElementById('workflow-grid').innerHTML = '<p class="hint">Failed to load workflows.</p>';
-    }
-}
-
-function renderWorkflowGrid(list) {
-    const grid = document.getElementById('workflow-grid');
-    document.getElementById('delete-all-workflows').style.display = list.length ? 'inline' : 'none';
-    if (!list.length) {
-        grid.innerHTML = '<p class="hint">No saved workflows yet.</p>';
-        return;
-    }
-    let html = '';
-    list.forEach(w => {
-        const isSelected = state.workflowId === w.id;
-        html += '<div class="template-card' + (isSelected ? ' selected' : '') + '"' +
-            ' role="button" tabindex="0" data-id="' + w.id + '">' +
-            '<div class="workflow-card-icon">&#9878;</div>' +
-            '<div class="template-card-name" title="' + esc(w.name) + '">' + esc(w.name) + '</div>' +
-            '<div class="template-card-meta">' + w.route_count + ' routes &middot; ' + esc(w.routing_column) + '</div>' +
-            '<div class="template-card-actions">' +
-            '<button class="btn-small" data-action="rename" data-id="' + w.id + '">Rename</button>' +
-            '<button class="btn-small btn-danger" data-action="delete" data-id="' + w.id + '">Del</button>' +
-            '</div></div>';
-    });
-    grid.innerHTML = html;
-
-    grid.querySelectorAll('.template-card').forEach(card => {
-        card.addEventListener('click', e => {
-            if (e.target.closest('.template-card-actions')) return;
-            selectWorkflow(card.dataset.id);
-        });
-        card.addEventListener('keydown', e => {
-            if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault();
-                selectWorkflow(card.dataset.id);
-            }
-        });
-    });
-
-    grid.querySelectorAll('[data-action="rename"]').forEach(btn => {
-        btn.addEventListener('click', e => {
-            e.stopPropagation();
-            renameWorkflow(btn.dataset.id);
-        });
-    });
-    grid.querySelectorAll('[data-action="delete"]').forEach(btn => {
-        btn.addEventListener('click', e => {
-            e.stopPropagation();
-            deleteWorkflow(btn.dataset.id);
-        });
-    });
-}
-
-function selectWorkflow(id) {
-    state.workflowId = id;
-    document.querySelectorAll('#workflow-grid .template-card').forEach(c => {
-        c.classList.toggle('selected', c.dataset.id === id);
-    });
-    checkWorkflowFillReady();
-}
-
-async function renameWorkflow(id) {
-    const newName = window.prompt('New workflow name:');
-    if (!newName || !newName.trim()) return;
-    try {
-        await api('PUT', '/workflow/' + id, { name: newName.trim() });
-        loadWorkflows();
-    } catch (err) {
-        alert('Rename failed: ' + err.message);
-    }
-}
-
-async function deleteWorkflow(id) {
-    if (!window.confirm('Delete this workflow?')) return;
-    try {
-        await api('DELETE', '/workflow/' + id);
-        if (state.workflowId === id) {
-            state.workflowId = null;
-            checkWorkflowFillReady();
-        }
-        loadWorkflows();
-    } catch (err) {
-        alert('Delete failed: ' + err.message);
-    }
-}
-
-document.getElementById('toggle-create-workflow-btn').addEventListener('click', () => {
-    const panel = document.getElementById('create-workflow-panel');
-    panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
-});
-
-function resetWorkflowBuilder() {
-    document.getElementById('create-workflow-panel').style.display = 'none';
-    document.getElementById('workflow-name-input').value = '';
-    document.getElementById('workflow-excel-input').value = '';
-    document.getElementById('workflow-excel-file-name').textContent = 'No file chosen';
-    document.getElementById('workflow-routing-preview').style.display = 'none';
-    document.getElementById('routing-column-select').innerHTML = '<option value="">-- Pick a column --</option>';
-    document.getElementById('routing-values-list').innerHTML = '';
-    document.getElementById('save-workflow-btn').disabled = true;
-    showMsg('workflow-save-status', null, 'ok');
-}
-
-document.getElementById('workflow-excel-input').addEventListener('change', async e => {
-    const file = e.target.files[0];
-    if (!file) return;
-    document.getElementById('workflow-excel-file-name').textContent = file.name;
-    document.getElementById('workflow-excel-clear').style.display = 'inline-block';
-    const fd = new FormData();
-    fd.append('file', file);
-    try {
-        const data = await api('POST', '/upload/excel', fd);
-        state.workflowExcelId = data.excel_id;
-        const sel = document.getElementById('routing-column-select');
-        sel.innerHTML = '<option value="">-- Pick a column --</option>';
-        data.columns.forEach(col => {
-            const opt = document.createElement('option');
-            opt.value = col;
-            opt.textContent = col;
-            sel.appendChild(opt);
-        });
-        document.getElementById('workflow-routing-preview').style.display = 'block';
-        document.getElementById('routing-values-list').innerHTML = '<p class="hint">Select a routing column above.</p>';
-        document.getElementById('save-workflow-btn').disabled = true;
-    } catch (err) {
-        showMsg('fill-error', err.message, 'error');
-    }
-});
 
 // ======== DELETE ALL ========
 
@@ -964,16 +730,157 @@ function loadFillPreview(batchId) {
     document.getElementById('fill-preview-file-info').textContent = 'File ' + idx + ' / ' + files.length;
     document.getElementById('prev-file').disabled = idx <= 1;
     document.getElementById('next-file').disabled = idx >= files.length;
+    document.getElementById('fill-adjust-panel').style.display = 'none';
+    state.selectedField = null;
     const img = document.getElementById('fill-preview-img');
-    img.src = '/fill/' + batchId + '/preview/' + idx + '/' + state.previewPage + '?t=' + Date.now();
     img.onload = () => {
-        state.previewPageCount = 1;
-        document.getElementById('fill-preview-page-info').textContent = 'Page ' + state.previewPage + ' / 1';
-        document.getElementById('prev-gen-page').disabled = true;
-        document.getElementById('next-gen-page').disabled = true;
+        const totalPages = state.pageCount || 1;
+        state.previewPageCount = totalPages;
+        document.getElementById('fill-preview-page-info').textContent = 'Page ' + state.previewPage + ' / ' + totalPages;
+        document.getElementById('prev-gen-page').disabled = state.previewPage <= 1;
+        document.getElementById('next-gen-page').disabled = state.previewPage >= totalPages;
+        renderFillMarkers();
     };
+    img.src = '/fill/' + batchId + '/preview/' + idx + '/' + state.previewPage + '?t=' + Date.now();
     document.getElementById('fill-preview-wrapper').style.display = 'block';
+    loadFillFields();
 }
+
+async function loadFillFields() {
+    const batchId = state.batchId;
+    const idx = state.previewIndex;
+    const page = state.previewPage;
+    if (!batchId || !idx || !page) return;
+    try {
+        const fields = await api('GET', '/fill/' + batchId + '/fields/' + idx + '/' + page);
+        state.fillFields = fields;
+        console.log('fillFields loaded:', fields.length, fields);
+        renderFillMarkers();
+        if (!fields.length) {
+            document.getElementById('fill-error').textContent = 'No fields on this page — place fields in Step 2 first.';
+            document.getElementById('fill-error').style.display = 'block';
+        }
+    } catch (err) {
+        console.error('Failed to load fill fields:', err);
+        showMsg('fill-error', 'Failed to load field positions: ' + err.message, 'error');
+    }
+}
+
+function renderFillMarkers() {
+    const wrapper = document.getElementById('fill-preview-wrapper');
+    wrapper.querySelectorAll('.marker').forEach(el => el.remove());
+    const img = document.getElementById('fill-preview-img');
+    if (!img.naturalWidth) return;
+    const scaleX = img.clientWidth / img.naturalWidth;
+    const scaleY = img.clientHeight / img.naturalHeight;
+    state.fillFields.forEach(f => {
+        const marker = document.createElement('div');
+        var cls = 'marker fill-preview-marker'; if (state.selectedField === f.column) cls += ' marker-selected'; marker.className = cls;
+        marker.textContent = f.type === 'text' ? (f.text_value || f.column) : f.column;
+        marker.style.left = (f.x * scaleX) + 'px';
+        marker.style.top = (f.y * scaleY) + 'px';
+        const ptToPx = 150 / 72;
+        const fontSizePx = f.font_size * ptToPx * scaleY;
+        marker.style.fontSize = fontSizePx + 'px';
+        if (f.max_width) {
+            const widthPx = f.max_width * ptToPx * scaleX;
+            marker.style.width = widthPx + 'px';
+            marker.style.whiteSpace = 'normal';
+        }
+        marker.dataset.column = f.column;
+        marker.draggable = true;
+        marker.addEventListener('dragstart', e => {
+            e.dataTransfer.setData('text/plain', f.column);
+            e.dataTransfer.effectAllowed = 'move';
+        });
+        marker.addEventListener('click', e => {
+            e.stopPropagation();
+            selectFillField(f.column);
+        });
+        wrapper.appendChild(marker);
+    });
+}
+
+function selectFillField(column) {
+    const field = state.fillFields.find(f => f.column === column);
+    if (!field) return;
+    state.selectedField = column;
+    renderFillMarkers();
+    document.getElementById('adjust-field-name').textContent = field.column;
+    document.getElementById('adjust-font-size').value = field.font_size;
+    document.getElementById('fill-adjust-panel').style.display = 'block';
+}
+
+async function applyFillAdjustment(column, extra) {
+    const field = state.fillFields.find(f => f.column === column);
+    if (!field) return;
+    const fontInput = document.getElementById('adjust-font-size');
+    const fontSize = parseInt(fontInput.value) || 11;
+    const payload = {
+        column: column,
+        page: state.previewPage,
+        font_size: Math.max(6, Math.min(36, fontSize)),
+    };
+    if (extra) {
+        if (extra.x !== undefined) payload.x = extra.x;
+        if (extra.y !== undefined) payload.y = extra.y;
+    }
+    try {
+        await api('POST', '/fill/' + state.batchId + '/adjust/' + state.previewIndex, payload);
+        state.selectedField = null;
+        document.getElementById('fill-adjust-panel').style.display = 'none';
+        const img = document.getElementById('fill-preview-img');
+        img.src = '/fill/' + state.batchId + '/preview/' + state.previewIndex + '/' + state.previewPage + '?t=' + Date.now();
+        setTimeout(loadFillFields, 300);
+    } catch (err) {
+        showMsg('fill-error', 'Adjustment failed: ' + err.message, 'error');
+    }
+}
+
+document.getElementById('fill-preview-img').addEventListener('load', renderFillMarkers);
+
+const fillPreviewWrapper = document.getElementById('fill-preview-wrapper');
+fillPreviewWrapper.addEventListener('dragover', e => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+});
+fillPreviewWrapper.addEventListener('drop', e => {
+    e.preventDefault();
+    const column = e.dataTransfer.getData('text/plain');
+    if (!column) return;
+    const field = state.fillFields.find(f => f.column === column);
+    if (!field) return;
+    const img = document.getElementById('fill-preview-img');
+    if (!img.naturalWidth) return;
+    const rect = fillPreviewWrapper.getBoundingClientRect();
+    const scaleX = img.naturalWidth / img.clientWidth;
+    const scaleY = img.naturalHeight / img.clientHeight;
+    const rawX = (e.clientX - rect.left) * scaleX;
+    const rawY = (e.clientY - rect.top) * scaleY;
+    const pixelX = clamp(rawX, 0, img.naturalWidth);
+    const pixelY = clamp(rawY, 0, img.naturalHeight);
+    applyFillAdjustment(column, { x: Math.round(pixelX), y: Math.round(pixelY) });
+});
+
+document.getElementById('apply-adjust-btn').addEventListener('click', () => {
+    if (state.selectedField) {
+        applyFillAdjustment(state.selectedField);
+    }
+});
+document.getElementById('adjust-font-size').addEventListener('input', e => {
+    const marker = document.querySelector('#fill-preview-wrapper .marker.marker-selected');
+    if (!marker) return;
+    const val = parseInt(e.target.value) || 11;
+    const img = document.getElementById('fill-preview-img');
+    if (!img.naturalWidth) return;
+    const scaleY = img.clientHeight / img.naturalHeight;
+    const ptToPx = 150 / 72;
+    marker.style.fontSize = (clamp(val, 6, 36) * ptToPx * scaleY) + 'px';
+});
+document.getElementById('close-adjust-btn').addEventListener('click', () => {
+    state.selectedField = null;
+    document.getElementById('fill-adjust-panel').style.display = 'none';
+});
 
 document.getElementById('prev-file').addEventListener('click', () => {
     if (state.previewIndex > 1) {
@@ -999,134 +906,9 @@ document.getElementById('prev-gen-page').addEventListener('click', () => {
 });
 
 document.getElementById('next-gen-page').addEventListener('click', () => {
-    state.previewPage++;
-    loadFillPreview(state.batchId);
-});
-
-document.getElementById('delete-all-workflows').addEventListener('click', async e => {
-    e.preventDefault();
-    if (!window.confirm('Delete all workflows? This cannot be undone.')) return;
-    try {
-        const list = await api('GET', '/workflow/list');
-        for (const w of list) {
-            await api('DELETE', '/workflow/' + w.id);
-        }
-        state.workflowId = null;
-        await loadWorkflows();
-    } catch (err) {
-        alert('Failed to delete all workflows: ' + err.message);
+    if (state.previewPage < state.previewPageCount) {
+        state.previewPage++;
+        loadFillPreview(state.batchId);
     }
 });
 
-document.getElementById('routing-column-select').addEventListener('change', async () => {
-    const column = document.getElementById('routing-column-select').value;
-    if (!column || !state.workflowExcelId) {
-        document.getElementById('save-workflow-btn').disabled = true;
-        return;
-    }
-    state.workflowRoutingColumn = column;
-    try {
-        const data = await api('GET', '/upload/' + state.workflowExcelId + '/unique/' + encodeURIComponent(column));
-        renderRoutingValues(data.values);
-        document.getElementById('save-workflow-btn').disabled = data.values.length === 0;
-    } catch (err) {
-        alert('Failed to load routing values: ' + err.message);
-        document.getElementById('save-workflow-btn').disabled = true;
-    }
-});
-
-function renderRoutingValues(values) {
-    const list = document.getElementById('routing-values-list');
-    if (!values.length) {
-        list.innerHTML = '<p class="hint">Column has no values in data rows.</p>';
-        return;
-    }
-    let html = '<table class="route-mapping-table"><thead><tr><th>Value</th><th>Template</th></tr></thead><tbody>';
-    values.forEach(v => {
-        html += '<tr><td>' + esc(v) + '</td><td><select class="route-template-select">' +
-            '<option value="">-- Pick --</option>';
-        state.templates.forEach(t => {
-            html += '<option value="' + t.id + '">' + esc(t.name) + '</option>';
-        });
-        html += '</select></td></tr>';
-    });
-    html += '</tbody></table>';
-    list.innerHTML = html;
-}
-
-document.getElementById('save-workflow-btn').addEventListener('click', async () => {
-    const name = document.getElementById('workflow-name-input').value.trim();
-    if (!name) {
-        showMsg('workflow-save-status', 'Please enter a workflow name.', 'error');
-        return;
-    }
-    const routes = [];
-    document.querySelectorAll('.route-template-select').forEach(sel => {
-        if (sel.value) {
-            const row = sel.closest('tr');
-            const valueTd = row.querySelector('td');
-            routes.push({ value: valueTd.textContent.trim(), template_id: sel.value });
-        }
-    });
-    if (!routes.length) {
-        showMsg('workflow-save-status', 'Please map at least one value to a template.', 'error');
-        return;
-    }
-    try {
-        const data = await api('POST', '/workflow', {
-            name: name,
-            routing_column: state.workflowRoutingColumn,
-            routes: routes,
-        });
-        showMsg('workflow-save-status', 'Workflow "' + data.name + '" saved (' + data.route_count + ' routes)', 'ok');
-        resetWorkflowBuilder();
-        loadWorkflows();
-    } catch (err) {
-        showMsg('workflow-save-status', err.message, 'error');
-    }
-});
-
-document.getElementById('workflow-excel-data-input').addEventListener('change', e => {
-    checkWorkflowFillReady();
-    const el = document.getElementById('workflow-excel-data-file-name');
-    const btn = document.getElementById('workflow-excel-data-clear');
-    if (e.target.files[0]) {
-        el.textContent = e.target.files[0].name;
-        btn.style.display = 'inline-block';
-        showMsg('workflow-fill-excel-status', 'Selected: ' + e.target.files[0].name, 'ok');
-    } else {
-        el.textContent = 'No file chosen';
-        btn.style.display = 'none';
-        document.getElementById('workflow-fill-excel-status').style.display = 'none';
-    }
-});
-
-function checkWorkflowFillReady() {
-    document.getElementById('start-workflow-fill-btn').disabled = !(
-        state.workflowId && document.getElementById('workflow-excel-data-input').files.length > 0
-    );
-}
-
-document.getElementById('start-workflow-fill-btn').addEventListener('click', async () => {
-    const file = document.getElementById('workflow-excel-data-input').files[0];
-    if (!file || !state.workflowId) return;
-    document.getElementById('fill-done').style.display = 'none';
-    document.getElementById('fill-error').style.display = 'none';
-    document.getElementById('workflow-fill-warnings').style.display = 'none';
-    const fd = new FormData();
-    fd.append('file', file);
-    try {
-        const data = await api('POST', '/fill/workflow?workflow_id=' + state.workflowId, fd);
-        if (data.warnings && data.warnings.length) {
-            const w = document.getElementById('workflow-fill-warnings');
-            w.innerHTML = '<strong>Warnings:</strong><br>' + data.warnings.join('<br>');
-            w.style.display = 'block';
-        }
-        state.batchId = data.batch_id;
-        document.getElementById('fill-progress').style.display = 'block';
-        document.getElementById('start-workflow-fill-btn').disabled = true;
-        startPolling(data.batch_id);
-    } catch (err) {
-        showMsg('fill-error', err.message, 'error');
-    }
-});

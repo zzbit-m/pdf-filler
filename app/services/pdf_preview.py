@@ -43,3 +43,7 @@ def render_preview(
 
 def pixel_to_point(pixel: float, dpi: int = PREVIEW_DPI) -> float:
     return pixel * 72 / dpi
+
+
+def point_to_pixel(point: float, dpi: int = PREVIEW_DPI) -> float:
+    return point * dpi / 72

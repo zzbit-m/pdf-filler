@@ -56,12 +56,3 @@ def test_empty_excel_raises(tmp_path: Path) -> None:
     columns = excel_reader.read_columns(path)
     assert columns == []
 
-
-def test_read_unique_values(sample_excel: Path) -> None:
-    values = excel_reader.read_unique_values(sample_excel, "Department")
-    assert values == ["Engineering", "HR"]
-
-
-def test_read_unique_values_column_not_found(sample_excel: Path) -> None:
-    values = excel_reader.read_unique_values(sample_excel, "Nonexistent")
-    assert values == []

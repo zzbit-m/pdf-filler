@@ -13,11 +13,9 @@ uv pip install -e ".[dev]"
 
 ## Run
 
-```bash
-uv run uvicorn app.main:app --reload
-```
+Double-click **`start.bat`** — it installs dependencies automatically and opens `http://localhost:8000` in your browser.
 
-Opens at `http://localhost:8000/`.
+Close the terminal window to stop the server.
 
 ## Use
 
@@ -27,13 +25,11 @@ Opens at `http://localhost:8000/`.
 
 **Step 2 — Position**
 - Drag column labels from the sidebar onto the PDF preview to place them
-- auto-position suggestions appear per page with confidence scores — check and apply
 - Adjust font size and max-width per field
 - Save as a template
 
 **Step 3 — Generate**
-- *Single Template* — pick a saved template, upload your data Excel, generate
-- *Workflow Batch* — create a workflow that routes Excel rows to different templates by a routing column value (e.g. `Department=Engineering` → engineering form, `Department=HR` → HR form)
+- Pick a saved template, upload your data Excel, generate
 - Download the result as a ZIP
 
 ## Commands
@@ -47,4 +43,4 @@ Opens at `http://localhost:8000/`.
 
 ## How it works
 
-Excel data is overlaid onto the PDF using PyMuPDF (`fitz`) text insertion at saved coordinates. The PDF is flat — no AcroForm fields, no annotation layer. Templates and workflows are stored as JSON files in `data/`.
+Excel data is overlaid onto the PDF using PyMuPDF (`fitz`) text insertion at saved coordinates. The PDF is flat — no AcroForm fields, no annotation layer. Templates are stored as JSON files in `data/templates/`.

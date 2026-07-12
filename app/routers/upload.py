@@ -1,4 +1,3 @@
-import re
 import uuid
 from pathlib import Path
 
@@ -7,16 +6,17 @@ from fastapi import APIRouter, HTTPException, UploadFile
 
 from app.config import DATA_BASE
 from app.schemas.models import ExcelUploadResponse, PdfUploadResponse
-from app.services.excel_reader import read_rows, read_unique_values
+from app.services.excel_reader import read_rows
+from app.services.pdf_preview import render_preview
 
 router = APIRouter(prefix="/upload", tags=["upload"])
 
 UPLOAD_DIR = DATA_BASE / "uploads"
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-
-EXCEL_ID_RE = re.compile(r"^[0-9a-f-]+$")
+CACHE_DIR = DATA_BASE / "preview_cache"
 
 ALLOWED_EXCEL = {".xlsx", ".xlsm"}
+MAX_UPLOAD_SIZE = 100 * 1024 * 1024
 
 
 @router.post("/excel", response_model=ExcelUploadResponse)
@@ -26,9 +26,11 @@ async def upload_excel(file: UploadFile) -> ExcelUploadResponse:
     ext = Path(file.filename).suffix.lower()
     if ext not in ALLOWED_EXCEL:
         raise HTTPException(400, detail=f"Unsupported file type '{ext}'. Use .xlsx or .xlsm")
+    content = await file.read()
+    if len(content) > MAX_UPLOAD_SIZE:
+        raise HTTPException(413, detail="File too large (max 100MB)")
     excel_id = str(uuid.uuid4())
     filepath = UPLOAD_DIR / f"{excel_id}.xlsx"
-    content = await file.read()
     filepath.write_bytes(content)
     try:
         columns, rows = read_rows(filepath)
@@ -43,24 +45,15 @@ async def upload_excel(file: UploadFile) -> ExcelUploadResponse:
     return ExcelUploadResponse(columns=columns, preview_rows=rows[:3], excel_id=excel_id)
 
 
-@router.get("/{excel_id}/unique/{column}")
-async def get_unique_values(excel_id: str, column: str) -> dict[str, list[str]]:
-    if not EXCEL_ID_RE.match(excel_id):
-        raise HTTPException(400, detail="Invalid excel ID")
-    filepath = UPLOAD_DIR / f"{excel_id}.xlsx"
-    if not filepath.exists():
-        raise HTTPException(404, detail="Excel file not found")
-    values = read_unique_values(filepath, column)
-    return {"values": values}
-
-
 @router.post("/pdf", response_model=PdfUploadResponse)
 async def upload_pdf(file: UploadFile) -> PdfUploadResponse:
     if not file.filename or not file.filename.lower().endswith(".pdf"):
         raise HTTPException(400, detail="Only PDF files are accepted")
+    content = await file.read()
+    if len(content) > MAX_UPLOAD_SIZE:
+        raise HTTPException(413, detail="File too large (max 100MB)")
     pdf_id = str(uuid.uuid4())
     filepath = UPLOAD_DIR / f"{pdf_id}.pdf"
-    content = await file.read()
     filepath.write_bytes(content)
 
     try:
@@ -78,5 +71,11 @@ async def upload_pdf(file: UploadFile) -> PdfUploadResponse:
             raise HTTPException(400, detail="PDF has no pages")
     finally:
         doc.close()
+
+    try:
+        page_cache_dir = CACHE_DIR / pdf_id
+        render_preview(filepath, 0, cache_dir=page_cache_dir)
+    except Exception:
+        pass
 
     return PdfUploadResponse(pdf_id=pdf_id, page_count=page_count, filename=file.filename)

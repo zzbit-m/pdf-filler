@@ -56,12 +56,16 @@ async def save_template(req: TemplateSaveRequest) -> TemplateSaveResponse:
             "y": pt.y,
             "font_size": f.font_size,
             "max_width": f.max_width,
+            "type": f.type,
+            "text_value": f.text_value,
         })
 
     warnings: list[str] = []
     for i, a in enumerate(converted):
         for b in converted[i + 1:]:
             if a["page"] == b["page"]:
+                if a.get("type") == "text" or b.get("type") == "text":
+                    continue
                 ax: float = cast(float, a["x"])
                 bx: float = cast(float, b["x"])
                 dx = abs(ax - bx)

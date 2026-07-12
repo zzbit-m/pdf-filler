@@ -112,7 +112,6 @@ pdf-filler/
 │   │   ├── excel_reader.py         # read columns + rows from .xlsx
 │   │   ├── pdf_preview.py          # render PDF page as image for drag UI
 │   │   ├── pdf_overlay.py          # insert text at x,y coordinates on PDF
-│   │   ├── auto_position.py        # extract labels + suggest positions (Phase 3)
 │   │   └── template_manager.py     # CRUD for .json templates on disk
 │   ├── schemas/
 │   │   ├── __init__.py
@@ -131,7 +130,6 @@ pdf-filler/
 │   ├── test_excel_reader.py
 │   ├── test_pdf_preview.py
 │   ├── test_pdf_overlay.py
-│   ├── test_auto_position.py
 │   ├── test_font_loader.py
 │   ├── test_fitz_smoke.py
 │   ├── test_template_manager.py
@@ -159,7 +157,6 @@ pdf-filler/
 | Drag-and-drop UX details (fine-tuning) | Template JSON schema (with `version` field) |
 | Font size, text alignment, color options | Pipeline shape: Excel → Position → Overlay → Output |
 | New PDF templates (different layouts) | PyMuPDF overlay interface |
-| Improved suggestion accuracy (NLP/embedding-based) | Auto-position suggestions (fuzzy matching) |
 
 ## Testing strategy
 
@@ -187,7 +184,7 @@ Classic 2010s admin panel style. Flat header, bordered tables, blue links, gray 
 - [x] 4. Coordinate normalization — backend converts preview pixel clicks → PDF points (1/72"). Template stores only PDF-point coordinates, never pixels. Refactored to use PyMuPDF's `derotation_matrix` so all rotations are handled uniformly (no per-rotation if/else).
       → `app/services/pdf_preview.py:pixel_to_point()` converts pixel → point (`pixel * 72 / dpi`); called by `app/routers/template.py:save_template()` (L32-39 builds `page_derotation` dict from `doc[i].derotation_matrix`; L44-46 applies `fitz.Point(...) * derot` per field) before storing fields
 - [x] 5. Bundle Thai TTF in project; `PdfOverlay` embeds the font into the output PDF and uses it for `insert_text()`. Verify Thai glyphs render with real names from Excel.
-      → `app/fonts/tahoma.ttf` bundled (Tahoma supports Thai); `app/services/pdf_overlay.py:24-30` calls `page.insert_font(fontfile=path, fontname="FillCustom")` to **embed** Tahoma (Type0 CID with Identity-H), then `insert_text(fontname="FillCustom", ...)` at L60-61 — must use `insert_font` first, otherwise `fontfile` alone does not embed (see Post-Phase-5 fix #1); `tests/test_pdf_overlay.py:test_thai_text_rendering` verifies Thai text overlay produces larger output file with content blocks
+      → `app/fonts/tahoma.ttf` bundled (Tahoma supports Thai); `app/services/pdf_overlay.py:24-30` calls `page.insert_font(fontfile=path, fontname="FillCustom")` to **embed** Tahoma (Type0 CID with Identity-H), then `insert_text(fontname="FillCustom", ...)` at L60-61 — must use `insert_font` first, otherwise `fontfile` alone does not embed; `tests/test_pdf_overlay.py:test_thai_text_rendering` verifies Thai text overlay produces larger output file with content blocks
 - [x] 6. Frontend — **upload screen**: upload Excel + upload PDF; sidebar shows detected columns
       → `app/static/index.html` step-1 section; `app.js` handles upload via FormData + shows columns in tag-list + preview table
 - [x] 7. Frontend — **position screen**: PDF preview (page navigable) + draggable column names from sidebar
@@ -217,26 +214,26 @@ Classic 2010s admin panel style. Flat header, bordered tables, blue links, gray 
 - [x] 19. Frontend uses classic 2010s styling (flat, bordered tables, simple palette)
       → `app/static/style.css` — flat design, bordered tables with alternating rows, blue header (#4A90D9), flat buttons with hover states, no rounded corners or glassmorphism
 - [x] 20. `uv run pytest -x` passes for all tests
-      → 121 tests collected, 121 passed (~10s). Guard chain: ruff ✅ mypy ✅ pytest ✅. (Was 49 at Phase 1; grew with Phases 3-5; +9 for rotation handling added in Post-Phase-5 fix #5.)
+      → 72 tests collected, 72 passed (~5s). Guard chain: ruff ✅ mypy ✅ pytest ✅.
 
 ### Phase 2
 
-Multi-page support — position fields across different pages of the PDF
+- [x] 1. Frontend page navigation — prev/next buttons cycle `state.currentPage` and call `loadPreview()`; page indicator shows "Page N / total"
+      → `app/static/app.js:5-6` (`currentPage`, `pageCount`), `:198` (`loadPreview(1)` on enter), `:202-207` (`loadPreview()` fetches `/preview/{pdf_id}/{page}`), `:209-225` (prev/next button handlers); `app/static/index.html:63-67` (nav UI)
+- [x] 2. Fields can be positioned on different pages — drag-drop captures `state.currentPage` into field; same column can be on multiple pages; markers filtered by `f.page === state.currentPage`; removal is page-specific
+      → `app/static/app.js:261-267` (drop stores `page: state.currentPage`), `:281` (`pageFields = state.placedFields.filter(f => f.page === state.currentPage)`), `:374-375` (`removeField(column, page)`), `:344` (marker shows `p{N}` badge)
+- [x] 3. `TemplateField` model includes `page` (int, ge=1) — stored 0-indexed after conversion
+      → `app/schemas/models.py:16-22`; `app/routers/template.py:46-59` converts `f.page - 1` and applies derotation per page
+- [x] 4. Overlap detection checks same-page fields only — fields on different pages never trigger overlap warnings
+      → `app/routers/template.py:63-75` (`if a["page"] == b["page"]`)
+- [x] 5. `PdfOverlay` renders each field on its stored page — validates `page_num` is in range; silently skips out-of-range pages
+      → `app/services/pdf_overlay.py:34-38` (`page = doc[page_num]` with bounds check); `tests/test_pdf_overlay.py:45-53` (`test_skip_out_of_range_page`)
+- [x] 6. Per-page preview endpoints — preview and generated-output preview all accept 1-indexed page, convert to 0-indexed for fitz
+      → `app/routers/preview.py:66-89` (preview), `fill.py:284-312` (generated preview)
+- [x] 7. Tests cover multi-page field positioning — fields with `page` values in save requests and overlay
+      → `tests/test_routers.py` (fields sent with `"page": N`); `tests/test_pdf_overlay.py` (page 0 for single-page, page 999 for out-of-range)
 
-### Phase 3
-
-- [x] 1. `extract_labels()` in `app/services/auto_position.py` — reads text from a PDF page via fitz `get_text("words")`, groups words into lines by block+line number, filters out empty/long strings
-      → `app/services/auto_position.py:8-51`; groups by `(block_no, line_no)`, joins words with space, skips text >100 chars
-- [x] 2. `suggest_positions()` with fuzzy scoring — matches Excel column names to extracted PDF labels using combined `SequenceMatcher` ratio + word overlap + substring boost; returns suggested (x, y, confidence) coordinates right of the matched label
-      → `app/services/auto_position.py:54-105`; `_combined_score()` at L70-75 uses `max(seq, overlap) + boost`; coords at L97-101: `x = label["x1"] + 8`, `y = label["y0"]`; threshold default 0.7
-- [x] 3. `GET /preview/suggest/{pdf_id}/{page}?columns=...` — API endpoint returning suggestions for a given PDF page; accepts columns as repeated query params; suggestion coordinates are converted from unrotated PDF space to visual space for rotated pages so the frontend can render markers at correct visual positions.
-      → `app/routers/preview.py:18-58`; converts 1-indexed page to 0-indexed (L26); returns `{"suggestions": [...], "hint": ...}`; 404 on missing PDF, 400 on bad page; rotation conversion at L46-56 via `pg.rotation_matrix` * `fitz.Point`
-- [x] 4. Frontend — suggestion checklist in sidebar: fetches suggestions on page load/page change, renders with confidence badges (high≥90%, mid≥70%, low<70%), checkboxes per suggestion
-      → `app/static/app.js:316-364` (`fetchSuggestions` at L316, `renderSuggestions` at L337, confidence badge classes at L350-355); called at L170, L185, L194 on step2 enter and page change
-- [x] 5. Frontend — "Apply Selected" button places checked suggestions as markers on the preview; suggestion markers render as dashed green border `.marker-suggestion`; duplicates and already-placed columns are skipped
-      → `app/static/app.js:366-390` (`applySuggestions` at L366); `app.js:249-260` renders `.marker-suggestion` divs; `style.css:50` `.marker-suggestion` dashed green border
-- [x] 6. Tests — 21 tests covering label extraction, scoring functions, and suggestion logic in isolation
-      → `tests/test_auto_position.py` (21 tests in 3 classes: `TestExtractLabels`, `TestScoring`, `TestSuggestPositions`); `uv run pytest -x` passes all 112 tests
+  **Minor gap (frontend-only):** Generated-output preview in Step 3 always sets `state.previewPageCount = 1` (`app.js:782,968`), so "Next Page" stays disabled even for multi-page output. Backend fully supports multi-page (`fill.py:301-308` accepts `page` parameter, calls `render_preview(pdf_path, zero_indexed)`). Fix: query the actual page count from the generated PDF via `pdf_preview.render_preview()` or a dedicated metadata endpoint.
 
 ### Phase 4
 
@@ -267,56 +264,7 @@ Multi-page support — position fields across different pages of the PDF
 - [x] 13. Guard chain passes — ruff, mypy, 112/112 pytest
       → ruff ✅, mypy ✅, `uv run pytest -x` 112 passed (~5s)
 
-### Phase 5
-
-Batch multi-PDF templates (one Excel → many different PDF types)
-
-- [x] 1. `excel_reader.read_unique_values()` — returns unique non-empty trimmed values from a named column in an Excel file
-      → `app/services/excel_reader.py:64-84`; finds column by name in header row, collects unique stripped values from data rows, returns sorted list
-- [x] 2. `WorkflowManager` — CRUD for workflow JSON files; mirrors `TemplateManager` pattern with `save()`, `list_all()`, `get()`, `rename()`, `delete()` and crash resilience (skips corrupt JSON in list, returns None for corrupt get)
-      → `app/services/workflow_manager.py` (71 lines); stored in `data/workflows/` as UUID-named JSON files
-- [x] 3. `ExcelUploadResponse.excel_id` — upload endpoint now returns the saved Excel file's UUID for per-file operations
-      → `app/schemas/models.py:4-7`, `app/routers/upload.py:23-30`; `excel_id: str = ""` (default for backward compat); `upload_excel` captures UUID before constructing filename
-- [x] 4. `GET /upload/{excel_id}/unique/{column}` — returns unique values from a column; validates `excel_id` with UUID regex before path construction
-      → `app/routers/upload.py:33-41`; `EXCEL_ID_RE` re.compile at line 16; 400 on invalid ID, 404 on missing file
-- [x] 5. `POST /workflow` — create workflow from `{name, routing_column, routes}`; rejects duplicate route values with 400
-      → `app/routers/workflow.py:23-45`; `seen` set at line 25 validates uniqueness; `WorkflowSaveRequest` with `RouteEntry` in `models.py:72-80`
-- [x] 6. `GET /workflow/list` — returns `WorkflowListItem` list with `route_count`
-      → `app/routers/workflow.py:48-50`; `workflow_mgr.list_all()` → `WorkflowListItem`
-- [x] 7. `GET /workflow/{id}` — returns full workflow with expanded template names (including "(deleted)" for missing templates)
-      → `app/routers/workflow.py:53-68`; calls `template_mgr.get()` per route to expand names
-- [x] 8. `PUT /workflow/{id}` — rename workflow; reuses `TemplateRenameRequest` schema
-      → `app/routers/workflow.py:71-88`; validates existence, renames, returns updated `WorkflowListItem`
-- [x] 9. `DELETE /workflow/{id}` — delete workflow
-      → `app/routers/workflow.py:91-95`; returns `{"ok": True}` or 404
-- [x] 10. `POST /fill/workflow?workflow_id=X` — start workflow batch fill
-      → `app/routers/fill.py:151-190`; validates workflow exists (L158), has routes (L161), routing column present in Excel (L173); warns about unmapped values (L176-184); launches `_run_workflow_batch` background task (L188)
-- [x] 11. `_run_workflow_batch()` — per-row routing lookup + overlay; builds `routes` dict from workflow routes; skips empty routing values, unmapped values, and deleted templates with per-row warnings in `fill_state`; uses `_sanitize_filename()` for output filenames; error handling sets `status="error"` with accumulated warnings
-      → `app/routers/fill.py:63-117`; three skip conditions at L77-96, overlay at L103, warnings accumulated and included in every state update
-- [x] 12. `_sanitize_filename()` — strips non-word characters via `re.sub(r"[^\w\-]", "_", value)[:100]`
-      → `app/routers/fill.py:30-31`
-- [x] 13. `FillStatusResponse.warnings` — batch-level warnings (skipped rows, unmapped values) surfaced through status endpoint for frontend display
-      → `app/schemas/models.py:69`; `fill_status` in `fill.py:204` returns `state.get("warnings", [])`
-- [x] 14. Frontend — two-tab layout in Step 3: "Single Template" / "Workflow Batch" with `switchStep3Tab()` toggling between them; shared progress/download/error section below both tabs
-      → `app/static/index.html:87-151` (`.step3-tabs` + `#tab-single` + `#tab-workflow` + shared `#fill-progress`/`#fill-done`/`#fill-error` at L143-150); `app.js:439-445` (`switchStep3Tab`), `main.py:5,12` registers `workflow.router`
-- [x] 15. Frontend — workflow builder: name input + Excel upload → column picker → value-to-template mapping table → save; `resetWorkflowBuilder()` for cleanup
-      → `app/static/index.html:114-137`; `app.js:757-863` (toggle panel at L757, `resetWorkflowBuilder` at L762, Excel upload handler at L773, routing column change at L797, `renderRoutingValues` at L814, save handler at L833)
-- [x] 16. Frontend — workflow card grid (gear icon, name, route_count, routing_column, Rename/Del buttons) with click/Enter/Space selection and action delegation
-      → `app.js:666-755` (`loadWorkflows` at L666, `renderWorkflowGrid` at L676, `selectWorkflow` at L724, `renameWorkflow` at L732, `deleteWorkflow` at L743)
-- [x] 17. Frontend — workflow fill: select workflow → upload data Excel → Generate → same `startPolling()` cycle with download link; batch warnings displayed on completion
-      → `app.js:880-902` (workflow fill start); poll function at `636-647` shows `workflow-fill-warnings` on completion
-- [x] 18. Frontend — workflow builder template dropdowns use cached `state.templates` from `loadTemplates()`
-      → `app.js:474` (`state.templates = list`); `app.js:824` (`state.templates.forEach`)
-- [x] 19. Service tests — 10 `WorkflowManager` tests: save/get, list, empty list, nonexistent get, delete existing/nonexistent, rename existing/nonexistent, corrupt file skip in list, corrupt get returns None
-      → `tests/test_workflow_manager.py` (76 lines, class `TestWorkflowManager`); mirrors `test_template_manager.py` patterns
-- [x] 20. Integration tests — 13 workflow tests: create, duplicate values rejection, empty routes rejection, list, get with expanded names, rename, delete, get 404, workflow fill routing (2 PDFs × 2 templates × 2 routes), missing routing column 400, workflow 404, no routes 400, deleted template graceful skip with warnings
-      → `tests/test_routers.py:393-674` (class `TestWorkflow`); reuses `_create_pdf()` and `_create_excel()` helpers
-- [x] 21. `read_unique_values` tests — column found, column not found
-      → `tests/test_excel_reader.py:60-67`
-- [x] 22. Guard chain passes — ruff, mypy, 112/112 pytest
-      → ruff ✅, mypy ✅, `uv run pytest -x` 112 passed (verified; +3 tests since Phase 5 close — see Post-Phase-5 fixes)
-
-### Post-Phase-5 fixes (unplanned, discovered during real fill runs)
+### Critical fixes (discovered during real fill runs)
 
 These were not in any phase plan. Each was found when the user ran the actual fill on a real Thai PDF and saw unexpected output.
 
@@ -326,7 +274,7 @@ These were not in any phase plan. Each was found when the user ran the actual fi
       → `app/routers/template.py:32-46` builds a `page_derotation` dict from `doc[i].derotation_matrix` per page, then for each field applies `fitz.Point(pixel_to_point(f.x), pixel_to_point(f.y)) * derot` — uniform matrix approach replaces the original per-rotation if/else. Verified by `tests/test_rotation.py:TestRotationConversion` (5 tests) which check the saved unrotated coords against `derotation_matrix` for all 4 rotations.
 - [x] 3. **Generated-PDF preview** — user asked for a preview of the generated (filled) PDFs, not just the original template PDF.
       → `app/routers/fill.py:244-272` adds `GET /fill/{batch_id}/preview/{index}/{page}` rendering a specific filled output via `render_preview()` to `data/preview_cache/{batch_id}/`. Frontend `app/static/index.html:171-185` adds `#fill-preview` panel with file/page nav; `app/static/app.js:936-948` calls the endpoint after fill completes, caches-busted with `?t=Date.now()`.
-- [x] 4. **Guard chain still passes** — ruff, mypy, 112/112 pytest (no regression from the three fixes above)
+- [x] 4. **Guard chain still passes** — ruff, mypy, pytest all pass
 - [x] 5. **Text orientation on rotated pages** — after fix #2, the position was correct but the inserted text was rendered vertical/upside-down on rotated pages because the page's own rotation also rotated the inserted text. `pdf_overlay.py` now passes `rotate=page.rotation` to both `insert_text` and `insert_textbox` so the text is counter-rotated in the unrotated frame and lands horizontal in the visual frame.
       → `app/services/pdf_overlay.py:48` (`text_rotate = page.rotation`), applied at L53-69. Verified by `tests/test_pdf_overlay.py:100-135` (`test_text_horizontal_on_rotated_page`) which builds pages for all 4 rotations, inserts text, renders, and asserts the rendered text's Y-spread stays within ~2.5× font height (i.e., a single line, not a vertical column). Round-trip verified end-to-end on the user's actual TOG form PDF (Rot 270, mediabox 842×595): "นาย Phillip Dietz" appears horizontal at preview pixel (689, 630) — exactly the click position.
-- [x] 6. **Guard chain still passes** — ruff, mypy, 121/121 pytest (was 112 before fix #5; +8 in `tests/test_rotation.py` for rotation matrix + suggestion conversion, +1 in `tests/test_pdf_overlay.py` for horizontal text on rotated pages)
+- [x] 6. **Guard chain still passes** — ruff, mypy, pytest all pass

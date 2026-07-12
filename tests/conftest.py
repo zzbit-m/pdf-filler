@@ -59,7 +59,3 @@ def sample_font() -> str:
 def templates_dir(tmp_path: Path) -> Path:
     return tmp_path / "templates"
 
-
-@pytest.fixture
-def workflows_dir(tmp_path: Path) -> Path:
-    return tmp_path / "workflows"
