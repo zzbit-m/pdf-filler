@@ -211,8 +211,8 @@ Classic 2010s admin panel style. Flat header, bordered tables, blue links, gray 
       → `app/static/index.html` step-3; `app.js` enterStep3() loads template list, startFill() POSTs file, startPolling() GETs status every 1s, shows download link on completion
 - [x] 18. Error handling — wrong file type rejection, empty Excel, PDF that can't be rendered, empty cell values → skip overlay (no text placed), encrypted/read-only PDF rejection, corrupted PDF → 400, overlay errors propagated to user
       → wrong file type ✅ (`upload_pdf()` extension check); empty Excel ✅ (returns 400 if no columns found); encrypted PDF ✅ (`upload_pdf()` rejects `doc.needs_pass`); empty cell skip ✅ (field value check in `overlay_fields()`); corrupted PDF ✅ (`upload_pdf()` catches `fitz.FileDataError` → 400); overlay errors ✅ (`_run_batch()` sets `fill_state[batch_id].status="error"` with message). Tested at `test_routers.py:test_corrupted_pdf` and `test_fill_overlay_error`.
-- [x] 19. Frontend uses classic 2010s styling (flat, bordered tables, simple palette)
-      → `app/static/style.css` — flat design, bordered tables with alternating rows, blue header (#4A90D9), flat buttons with hover states, no rounded corners or glassmorphism
+- [ ] 19. Frontend uses classic 2010s styling (flat, bordered tables, simple palette)
+       → `app/static/style.css` — **superseded**. Was flat Arial/Helvetica design with blue header (#4A90D9). Redesigned with CSS custom properties, Fraunces/IBM Plex fonts, rust accent (#C24E2B), stepper navigation, dropzones, registration-mark motifs. Original 2010s direction intentionally replaced.
 - [x] 20. `uv run pytest -x` passes for all tests
        → 82 tests collected, 82 passed (~9s). Guard chain: ruff ✅ mypy ✅ pytest ✅.
 
@@ -233,7 +233,7 @@ Classic 2010s admin panel style. Flat header, bordered tables, blue links, gray 
 - [~] 7. Tests cover multi-page field positioning — fields with `page` values in save requests and overlay
        → `tests/test_routers.py` (fields sent with `"page": 1`); `tests/test_pdf_overlay.py` (page 0 for single-page, page 999 for out-of-range). **Gap**: no single test places fields on two different pages within one template save request — all template-router tests use `"page": 1` exclusively. The infrastructure (page-specific rendering, markers, overlap) is verified by other tests, but cross-page template saves are untested.
 
-  **Minor gap (frontend-only):** Generated-output preview in Step 3 always sets `state.previewPageCount = 1`, so "Next Page" stays disabled even for multi-page output. Backend fully supports multi-page (`generated_preview()` accepts `page` parameter, calls `render_preview(pdf_path, zero_indexed)`). Fix: query the actual page count from the generated PDF via `render_preview()` or a dedicated metadata endpoint.
+  **Minor gap (improved):** `loadFillPreview()` now uses `state.templatePageCount || 1` (line 891). `selectTemplate()` reads `t.page_count` from the template list response (line 726). `TemplateListItem` model includes `page_count: int = 1` with backward-compatible default. New templates store `page_count` in JSON via `template_manager.save()`. **Remaining**: old templates without `page_count` in their JSON still fall back to 1.
 
 ### Phase 3 (removed)
 
