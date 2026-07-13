@@ -6,7 +6,7 @@ services:
     buildCommand: pip install -e .
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
     envVars:
-      - key: PBEAM_DATA_DIR
+      - key: PDF_FILLER_DATA_DIR
         value: data
       - key: PYTHON_VERSION
         value: 3.12.3
