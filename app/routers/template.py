@@ -37,10 +37,13 @@ async def save_template(req: TemplateSaveRequest) -> TemplateSaveResponse:
     if pdf_path.exists():
         doc = fitz.open(pdf_path)
         try:
-            for i in range(doc.page_count):
+            page_count = doc.page_count
+            for i in range(page_count):
                 page_derotation[i] = doc[i].derotation_matrix
         finally:
             doc.close()
+    else:
+        page_count = 1
 
     converted = []
     for f in req.fields:
@@ -78,7 +81,9 @@ async def save_template(req: TemplateSaveRequest) -> TemplateSaveResponse:
                         f" on page {a['page'] + 1}"
                     )
 
-    template_id = manager.save(name=req.name, pdf_file=req.pdf_file, fields=converted)
+    template_id = manager.save(
+        name=req.name, pdf_file=req.pdf_file, fields=converted, page_count=page_count
+    )
     template = manager.get(template_id)
     if template is None:
         raise HTTPException(500, detail="Template data not found after save")
@@ -89,6 +94,7 @@ async def save_template(req: TemplateSaveRequest) -> TemplateSaveResponse:
         pdf_file=template["pdf_file"],
         version=template["version"],
         field_count=len(converted),
+        page_count=template.get("page_count", 1),
         created_at=template["created_at"],
         warnings=warnings,
     )
@@ -131,6 +137,7 @@ async def rename_template(template_id: str, req: TemplateRenameRequest) -> Templ
         version=updated["version"],
         created_at=updated["created_at"],
         field_count=len(updated.get("fields", [])),
+        page_count=updated.get("page_count", 1),
     )
 
 
@@ -147,6 +154,7 @@ async def duplicate_template(
         pdf_file=template["pdf_file"],
         version=template["version"],
         field_count=len(template.get("fields", [])),
+        page_count=template.get("page_count", 1),
         created_at=template["created_at"],
     )
 
@@ -167,6 +175,9 @@ async def thumbnail_template(template_id: str) -> FileResponse:
 
     page_cache_dir = PREVIEW_CACHE_DIR / pdf_file.replace(".pdf", "")
     page_cache_dir.mkdir(parents=True, exist_ok=True)
-    result = render_preview(pdf_path, 0, cache_dir=page_cache_dir)
+    try:
+        result = render_preview(pdf_path, 0, cache_dir=page_cache_dir)
+    except ValueError:
+        raise HTTPException(404, detail="PDF has no pages")
     cached_path = Path(result["image_path"])
     return FileResponse(str(cached_path), media_type="image/png")

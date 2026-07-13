@@ -1,11 +1,12 @@
 const state = {
     columns: [],
     previewRows: [],
-    pdfId: null,
-    pageCount: 0,
+    pdfs: [],
+    currentPdfIndex: 0,
     currentPage: 1,
-    placedFields: [],
+    placedFieldsMap: {},
     templateId: null,
+    templatePageCount: 0,
     batchId: null,
     polling: false,
     templates: [],
@@ -17,6 +18,15 @@ const state = {
     fillFields: [],
     selectedField: null,
 };
+
+function getCurrentPdf() { return state.pdfs[state.currentPdfIndex] || null; }
+
+function getPlacedFields() {
+    const pdf = getCurrentPdf();
+    if (!pdf) return [];
+    if (!state.placedFieldsMap[pdf.pdf_id]) state.placedFieldsMap[pdf.pdf_id] = [];
+    return state.placedFieldsMap[pdf.pdf_id];
+}
 
 function api(method, url, data, timeoutMs = 30000) {
     const controller = new AbortController();
@@ -70,7 +80,7 @@ document.querySelectorAll('#step-nav .step').forEach(btn => {
     btn.addEventListener('click', () => {
         const n = parseInt(btn.dataset.step);
         if (n === 1) { switchStep(1); return; }
-        if (n === 2 && state.columns.length && state.pdfId) { switchStep(2); return; }
+        if (n === 2 && state.columns.length && state.pdfs.length > 0) { switchStep(2); return; }
         if (n === 3) { switchStep(3); }
     });
 });
@@ -80,7 +90,7 @@ document.querySelectorAll('#step-nav .step').forEach(btn => {
 document.getElementById('excel-input').addEventListener('change', async e => {
     const file = e.target.files[0];
     if (!file) return;
-    document.getElementById('excel-file-name').textContent = file.name;
+    setFileNameEl('excel-file-name', file.name);
     document.getElementById('excel-clear').style.display = 'inline-block';
     showMsg('excel-status', 'Uploading...', 'ok');
     const fd = new FormData();
@@ -104,33 +114,135 @@ document.getElementById('excel-input').addEventListener('change', async e => {
 });
 
 document.getElementById('pdf-input').addEventListener('change', async e => {
-    const file = e.target.files[0];
-    if (!file) return;
-    document.getElementById('pdf-file-name').textContent = file.name;
+    const files = Array.from(e.target.files);
+    if (!files.length) return;
     document.getElementById('pdf-clear').style.display = 'inline-block';
-    showMsg('pdf-status', 'Uploading...', 'ok');
-    const fd = new FormData();
-    fd.append('file', file);
-    try {
-        const data = await api('POST', '/upload/pdf', fd);
-        state.pdfId = data.pdf_id;
-        state.pageCount = data.page_count;
-        document.querySelector('.upload-card:last-child').classList.add('file-loaded');
-        showMsg('pdf-status', 'Loaded: ' + data.filename + ' (' + data.page_count + ' page' + (data.page_count > 1 ? 's' : '') + ')', 'ok');
-        document.getElementById('pdf-details').textContent = 'Pages: ' + data.page_count + ' | Filename: ' + data.filename;
-        document.getElementById('pdf-info').style.display = 'block';
-        const previewImg = document.getElementById('pdf-upload-preview');
-        if (previewImg) {
-            previewImg.onerror = () => { document.getElementById('pdf-upload-preview-wrapper').classList.add('no-preview'); };
-            previewImg.src = '/preview/' + data.pdf_id + '/1?t=' + Date.now();
+    var successCount = 0;
+    var errorCount = 0;
+    for (var idx = 0; idx < files.length; idx++) {
+        var file = files[idx];
+        document.getElementById('pdf-file-name').textContent = 'Uploading ' + (idx + 1) + '/' + files.length + '...';
+        showMsg('pdf-status', 'Uploading ' + file.name + '...', 'ok');
+        var fd = new FormData();
+        fd.append('file', file);
+        try {
+            var data = await api('POST', '/upload/pdf', fd);
+            state.pdfs.push({
+                pdf_id: data.pdf_id,
+                page_count: data.page_count,
+                filename: data.filename,
+            });
+            successCount++;
+        } catch (err) {
+            errorCount++;
+            showMsg('pdf-status', file.name + ': ' + err.message, 'error');
         }
-        checkStep2Ready();
-    } catch (err) {
-        showMsg('pdf-status', err.message, 'error');
-        document.getElementById('pdf-file-name').textContent = 'No file chosen';
-        document.getElementById('pdf-clear').style.display = 'none';
-        e.target.value = '';
     }
+    e.target.value = '';
+    if (state.pdfs.length > 0 && state.currentPdfIndex >= state.pdfs.length) {
+        state.currentPdfIndex = 0;
+    }
+    renderPdfList();
+    if (state.pdfs.length > 0) {
+        document.querySelector('.upload-card:last-child').classList.add('file-loaded');
+        if (errorCount === 0) {
+            showMsg('pdf-status', state.pdfs.length + ' PDF(s) loaded', 'ok');
+        } else {
+            showMsg('pdf-status', successCount + ' loaded, ' + errorCount + ' failed', 'warning');
+        }
+    }
+    document.getElementById('pdf-file-name').textContent = state.pdfs.length + ' file(s) selected';
+    checkStep2Ready();
+});
+
+document.getElementById('pdf-add-more').addEventListener('click', function() {
+    document.getElementById('pdf-input').click();
+});
+
+function renderPdfList() {
+    const list = document.getElementById('pdf-list');
+    const items = document.getElementById('pdf-list-items');
+    if (!state.pdfs.length) {
+        list.style.display = 'none';
+        return;
+    }
+    list.style.display = 'block';
+    items.innerHTML = '';
+    state.pdfs.forEach(function(pdf, i) {
+        const div = document.createElement('div');
+        div.className = 'pdf-list-item';
+        div.innerHTML =
+            '<img class="pdf-list-thumb" src="/preview/' + pdf.pdf_id + '/1" loading="lazy" onerror="this.style.display=\'none\'">' +
+            '<span class="pdf-list-name" title="' + esc(pdf.filename) + '">' + esc(truncateFilename(pdf.filename, 35)) + ' (' + pdf.page_count + ' pages)</span>' +
+            '<button class="btn-small btn-danger pdf-remove-btn" data-index="' + i + '">\u2715</button>';
+        div.querySelector('.pdf-list-thumb').addEventListener('click', function() {
+            showLightbox(pdf);
+        });
+        div.querySelector('.pdf-remove-btn').addEventListener('click', function() {
+            var pdfId = state.pdfs[i].pdf_id;
+            state.pdfs.splice(i, 1);
+            delete state.placedFieldsMap[pdfId];
+            if (state.currentPdfIndex >= state.pdfs.length) {
+                state.currentPdfIndex = Math.max(0, state.pdfs.length - 1);
+            }
+            renderPdfList();
+            if (!state.pdfs.length) {
+                document.querySelector('.upload-card:last-child').classList.remove('file-loaded');
+                document.getElementById('pdf-status').style.display = 'none';
+                document.getElementById('pdf-file-name').textContent = 'No files chosen';
+                document.getElementById('pdf-clear').style.display = 'none';
+            } else {
+                document.getElementById('pdf-file-name').textContent = state.pdfs.length + ' file(s) selected';
+            }
+            checkStep2Ready();
+        });
+        items.appendChild(div);
+    });
+    updatePdfSelector();
+}
+
+function showLightbox(pdf) {
+    const overlay = document.getElementById('lightbox');
+    const img = document.getElementById('lightbox-img');
+    const info = document.getElementById('lightbox-info');
+    img.src = '/preview/' + pdf.pdf_id + '/1?t=' + Date.now();
+    info.textContent = pdf.filename + ' (' + pdf.page_count + ' pages)';
+    overlay.style.display = 'flex';
+}
+
+document.getElementById('lightbox').addEventListener('click', function(e) {
+    if (e.target === this || e.target === document.getElementById('lightbox-img')) {
+        this.style.display = 'none';
+    }
+});
+
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        document.getElementById('lightbox').style.display = 'none';
+    }
+});
+
+function updatePdfSelector() {
+    const sel = document.getElementById('pdf-selector');
+    if (!sel) return;
+    sel.innerHTML = '';
+    state.pdfs.forEach(function(pdf, i) {
+        const opt = document.createElement('option');
+        opt.value = i;
+        opt.textContent = truncateFilename(pdf.filename, 28) + ' (' + pdf.page_count + ' pgs)';
+        opt.title = pdf.filename;
+        if (i === state.currentPdfIndex) opt.selected = true;
+        sel.appendChild(opt);
+    });
+}
+
+document.getElementById('pdf-selector').addEventListener('change', function() {
+    state.currentPdfIndex = parseInt(this.value);
+    state.currentPage = 1;
+    renderPlacedFields();
+    renderMarkers();
+    updateSaveButton();
+    loadPreview(state.currentPage);
 });
 
 function renderColumnTags(columns) {
@@ -164,13 +276,39 @@ function renderPreviewTable(columns, rows) {
 
 function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
 
+function truncateFilename(name, maxLen) {
+    if (!name || name.length <= maxLen) return name;
+    return '\u2026' + name.slice(name.length - maxLen + 1);
+}
+
+function setFileNameEl(elId, filename) {
+    var el = document.getElementById(elId);
+    if (!el) return;
+    el.textContent = truncateFilename(filename, 35);
+    el.title = filename;
+}
+
+function pluralize(count, singular, plural) {
+    return count + ' ' + (count === 1 ? singular : plural);
+}
+
+function filterColumnTags(containerId, filterText) {
+    var container = document.getElementById(containerId);
+    if (!container) return;
+    var tags = container.querySelectorAll('.tag');
+    var filter = (filterText || '').toLowerCase();
+    tags.forEach(function(tag) {
+        tag.style.display = filter === '' || tag.textContent.toLowerCase().indexOf(filter) !== -1 ? '' : 'none';
+    });
+}
+
 function checkStep2Ready() {
-    document.getElementById('to-position-btn').disabled = !(state.columns.length && state.pdfId);
+    document.getElementById('to-position-btn').disabled = !(state.columns.length && state.pdfs.length > 0);
 }
 
 document.getElementById('to-position-btn').addEventListener('click', () => {
     state.currentPage = 1;
-    state.placedFields = [];
+    state.currentPdfIndex = 0;
     state.templateId = null;
     switchStep(2);
 });
@@ -195,6 +333,7 @@ function enterStep2() {
         container.appendChild(tag);
     });
     document.getElementById('template-name-input').value = '';
+    updatePdfSelector();
     renderPlacedFields();
     updateSaveButton();
     loadPreview(state.currentPage);
@@ -202,9 +341,10 @@ function enterStep2() {
 
 function loadPreview(page) {
     const img = document.getElementById('pdf-preview');
-    if (!state.pdfId) return;
-    img.src = '/preview/' + state.pdfId + '/' + page + '?t=' + Date.now();
-    document.getElementById('page-indicator').textContent = 'Page ' + page + ' / ' + state.pageCount;
+    const pdf = getCurrentPdf();
+    if (!pdf) return;
+    img.src = '/preview/' + pdf.pdf_id + '/' + page + '?t=' + Date.now();
+    document.getElementById('page-indicator').textContent = 'Page ' + page + ' / ' + pdf.page_count;
 }
 
 document.getElementById('prev-page').addEventListener('click', () => {
@@ -216,7 +356,9 @@ document.getElementById('prev-page').addEventListener('click', () => {
 });
 
 document.getElementById('next-page').addEventListener('click', () => {
-    if (state.currentPage < state.pageCount) {
+    const pdf = getCurrentPdf();
+    if (!pdf) return;
+    if (state.currentPage < pdf.page_count) {
         state.currentPage++;
         loadPreview(state.currentPage);
         setTimeout(renderMarkers, 100);
@@ -247,7 +389,8 @@ previewWrapper.addEventListener('drop', e => {
     previewWrapper.classList.remove('drag-over');
     const column = e.dataTransfer.getData('text/plain');
     if (!column) return;
-    const existingField = state.placedFields.find(f => f.column === column && f.page === state.currentPage);
+    const fields = getPlacedFields();
+    const existingField = fields.find(f => f.column === column && f.page === state.currentPage);
     if (!existingField && !state.columns.includes(column)) return;
     if (!previewImg.naturalWidth) return;
     const rect = previewImg.getBoundingClientRect();
@@ -258,12 +401,12 @@ previewWrapper.addEventListener('drop', e => {
     const pixelX = clamp(rawX, 0, previewImg.naturalWidth);
     const pixelY = clamp(rawY, 0, previewImg.naturalHeight);
     const storedY = clamp(pixelY, 0, previewImg.naturalHeight);
-    const existing = state.placedFields.findIndex(f => f.column === column && f.page === state.currentPage);
+    const existing = fields.findIndex(f => f.column === column && f.page === state.currentPage);
     if (existing >= 0) {
-        state.placedFields[existing].x = pixelX;
-        state.placedFields[existing].y = storedY;
+        fields[existing].x = pixelX;
+        fields[existing].y = storedY;
     } else {
-        state.placedFields.push({ column: column, page: state.currentPage, x: pixelX, y: storedY, font_size: 11, max_width: null });
+        fields.push({ column: column, page: state.currentPage, x: pixelX, y: storedY, font_size: 11, max_width: null });
     }
     renderPlacedFields();
     renderMarkers();
@@ -277,7 +420,7 @@ function renderMarkers() {
     if (!img.naturalWidth) return;
     const scaleX = img.clientWidth / img.naturalWidth;
     const scaleY = img.clientHeight / img.naturalHeight;
-    const pageFields = state.placedFields.filter(f => f.page === state.currentPage);
+    const pageFields = getPlacedFields().filter(f => f.page === state.currentPage);
     pageFields.forEach(f => {
         const marker = document.createElement('div');
         marker.className = f.type === 'text' ? 'marker marker-text' : 'marker';
@@ -309,12 +452,13 @@ window.addEventListener('resize', renderMarkers);
 
 function renderPlacedFields() {
     const list = document.getElementById('placed-fields-list');
-    if (state.placedFields.length === 0) {
+    const fields = getPlacedFields();
+    if (fields.length === 0) {
         list.innerHTML = '<p class="hint">No fields placed yet.</p>';
         return;
     }
     list.innerHTML = '';
-    state.placedFields.forEach(f => {
+    fields.forEach(f => {
         const div = document.createElement('div');
         div.className = 'placed-field';
         const sz = f.font_size || 11;
@@ -339,7 +483,7 @@ function renderPlacedFields() {
             let val = parseInt(e.target.value) || 11;
             val = Math.max(6, Math.min(36, val));
             e.target.value = val;
-            const f2 = state.placedFields.find(x => x.column === e.target.dataset.col && x.page === parseInt(e.target.dataset.p));
+            const f2 = getPlacedFields().find(x => x.column === e.target.dataset.col && x.page === parseInt(e.target.dataset.p));
             if (f2) {
                 f2.font_size = val;
                 renderMarkers();
@@ -349,7 +493,7 @@ function renderPlacedFields() {
         if (widthInput) {
             widthInput.addEventListener('change', e => {
                 const val = e.target.value.trim();
-                const f2 = state.placedFields.find(x => x.column === e.target.dataset.col && x.page === parseInt(e.target.dataset.p));
+                const f2 = getPlacedFields().find(x => x.column === e.target.dataset.col && x.page === parseInt(e.target.dataset.p));
                 if (f2) {
                     f2.max_width = val ? parseFloat(val) : null;
                     if (f2.max_width !== null && isNaN(f2.max_width)) f2.max_width = null;
@@ -360,7 +504,7 @@ function renderPlacedFields() {
         const textInput = div.querySelector('.text-value-input');
         if (textInput) {
             textInput.addEventListener('change', e => {
-                const f2 = state.placedFields.find(x => x.column === e.target.dataset.col && x.page === parseInt(e.target.dataset.p));
+                const f2 = getPlacedFields().find(x => x.column === e.target.dataset.col && x.page === parseInt(e.target.dataset.p));
                 if (f2) {
                     f2.text_value = e.target.value;
                     renderMarkers();
@@ -375,7 +519,9 @@ function renderPlacedFields() {
 }
 
 function removeField(column, page) {
-    state.placedFields = state.placedFields.filter(f => !(f.column === column && f.page === page));
+    const pdf = getCurrentPdf();
+    if (!pdf) return;
+    state.placedFieldsMap[pdf.pdf_id] = getPlacedFields().filter(f => !(f.column === column && f.page === page));
     renderPlacedFields();
     renderMarkers();
     updateSaveButton();
@@ -383,7 +529,7 @@ function removeField(column, page) {
 
 function updateSaveButton() {
     const btn = document.getElementById('save-template-btn');
-    btn.disabled = state.placedFields.length === 0;
+    btn.disabled = getPlacedFields().length === 0;
 }
 
 document.getElementById('save-template-btn').addEventListener('click', async () => {
@@ -392,10 +538,15 @@ document.getElementById('save-template-btn').addEventListener('click', async () 
         showMsg('template-save-status', 'Please enter a template name.', 'error');
         return;
     }
+    const pdf = getCurrentPdf();
+    if (!pdf) {
+        showMsg('template-save-status', 'No PDF selected — upload a PDF first.', 'error');
+        return;
+    }
     const body = {
         name: name,
-        pdf_file: state.pdfId + '.pdf',
-        fields: state.placedFields.map(f => ({
+        pdf_file: pdf.pdf_id + '.pdf',
+        fields: getPlacedFields().map(f => ({
             column: f.column,
             page: f.page,
             x: Math.round(f.x),
@@ -409,7 +560,8 @@ document.getElementById('save-template-btn').addEventListener('click', async () 
     try {
         const data = await api('POST', '/template', body);
         state.templateId = data.id;
-        let html = 'Saved: "' + data.name + '" (' + data.field_count + ' fields)';
+        state.templatePageCount = pdf.page_count;
+        let html = 'Saved: "' + data.name + '" (' + pluralize(data.field_count, 'field', 'fields') + ')';
         showMsg('template-save-status', html, 'ok');
         if (data.warnings && data.warnings.length) {
             const el = document.getElementById('template-save-status');
@@ -437,14 +589,14 @@ document.getElementById('excel-clear').addEventListener('click', () => {
 
 document.getElementById('pdf-clear').addEventListener('click', () => {
     document.getElementById('pdf-input').value = '';
-    document.getElementById('pdf-file-name').textContent = 'No file chosen';
+    state.pdfs = [];
+    state.currentPdfIndex = 0;
+    state.placedFieldsMap = {};
+    document.getElementById('pdf-file-name').textContent = 'No files chosen';
     document.getElementById('pdf-clear').style.display = 'none';
     document.getElementById('pdf-status').style.display = 'none';
-    document.getElementById('pdf-info').style.display = 'none';
-    document.getElementById('pdf-upload-preview').src = '';
+    document.getElementById('pdf-list').style.display = 'none';
     document.querySelector('.upload-card:last-child').classList.remove('file-loaded');
-    state.pdfId = null;
-    state.pageCount = 0;
     checkStep2Ready();
 });
 
@@ -456,7 +608,7 @@ document.getElementById('add-text-block-btn').addEventListener('click', () => {
     const centerX = img.naturalWidth ? Math.round(img.naturalWidth / 2) : 300;
     const centerY = img.naturalHeight ? Math.round(img.naturalHeight / 2) : 400;
     state.textBlockCounter++;
-    state.placedFields.push({
+    getPlacedFields().push({
         column: 'Text ' + state.textBlockCounter,
         page: state.currentPage,
         x: centerX,
@@ -523,7 +675,7 @@ function renderTemplateGrid(list) {
             ' role="button" tabindex="0" data-id="' + t.id + '">' +
             '<img class="template-thumb" src="/template/' + t.id + '/thumbnail" loading="lazy" onerror="this.style.display=\'none\'">' +
             '<div class="template-card-name" title="' + esc(t.name) + '">' + esc(t.name) + '</div>' +
-            '<div class="template-card-meta">' + t.field_count + ' fields</div>' +
+            '<div class="template-card-meta">' + pluralize(t.field_count, 'field', 'fields') + '</div>' +
             '<div class="template-card-actions">' +
             '<button class="btn-small" data-action="rename" data-id="' + t.id + '">Rename</button>' +
             '<button class="btn-small" data-action="duplicate" data-id="' + t.id + '">Copy</button>' +
@@ -570,6 +722,8 @@ function selectTemplate(id) {
     document.querySelectorAll('.template-card').forEach(c => {
         c.classList.toggle('selected', c.dataset.id === id);
     });
+    var template = state.templates.find(function(t) { return t.id === id; });
+    state.templatePageCount = template ? (template.page_count || 1) : 1;
     checkFillReady();
 }
 
@@ -612,7 +766,7 @@ document.getElementById('fill-excel-input').addEventListener('change', e => {
     const el = document.getElementById('fill-excel-file-name');
     const btn = document.getElementById('fill-excel-clear');
     if (e.target.files[0]) {
-        el.textContent = e.target.files[0].name;
+        setFileNameEl('fill-excel-file-name', e.target.files[0].name);
         btn.style.display = 'inline-block';
         showMsg('fill-excel-status', 'Selected: ' + e.target.files[0].name, 'ok');
     } else {
@@ -638,7 +792,7 @@ document.getElementById('start-fill-btn').addEventListener('click', async () => 
         const data = await api('POST', '/fill?template_id=' + state.templateId, fd);
         if (data.warnings && data.warnings.length) {
             const w = document.getElementById('fill-warnings');
-            w.innerHTML = '<strong>Warnings:</strong><br>' + data.warnings.join('<br>');
+            w.innerHTML = '<strong>Warnings:</strong><br>' + data.warnings.map(esc).join('<br>');
             w.style.display = 'block';
         }
         state.batchId = data.batch_id;
@@ -678,7 +832,7 @@ function startPolling(batchId) {
                 document.getElementById('start-fill-btn').disabled = false;
                 if (data.warnings && data.warnings.length) {
                     const w = document.getElementById('fill-warnings');
-                    w.innerHTML = '<strong>Batch warnings:</strong><br>' + data.warnings.join('<br>');
+                    w.innerHTML = '<strong>Batch warnings:</strong><br>' + data.warnings.map(esc).join('<br>');
                     w.style.display = 'block';
                 }
                 state.batchFiles = data.files || [];
@@ -734,7 +888,7 @@ function loadFillPreview(batchId) {
     state.selectedField = null;
     const img = document.getElementById('fill-preview-img');
     img.onload = () => {
-        const totalPages = state.pageCount || 1;
+        const totalPages = state.templatePageCount || 1;
         state.previewPageCount = totalPages;
         document.getElementById('fill-preview-page-info').textContent = 'Page ' + state.previewPage + ' / ' + totalPages;
         document.getElementById('prev-gen-page').disabled = state.previewPage <= 1;
@@ -754,7 +908,6 @@ async function loadFillFields() {
     try {
         const fields = await api('GET', '/fill/' + batchId + '/fields/' + idx + '/' + page);
         state.fillFields = fields;
-        console.log('fillFields loaded:', fields.length, fields);
         renderFillMarkers();
         if (!fields.length) {
             document.getElementById('fill-error').textContent = 'No fields on this page — place fields in Step 2 first.';
@@ -911,4 +1064,3 @@ document.getElementById('next-gen-page').addEventListener('click', () => {
         loadFillPreview(state.batchId);
     }
 });
-

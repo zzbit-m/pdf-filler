@@ -9,7 +9,7 @@ import openpyxl
 import pytest
 
 _TEST_DATA_DIR = tempfile.mkdtemp(prefix="pbeam-test-")
-os.environ.setdefault("PBEAM_DATA_DIR", _TEST_DATA_DIR)
+os.environ.setdefault("PDF_FILLER_DATA_DIR", _TEST_DATA_DIR)
 
 
 @atexit.register

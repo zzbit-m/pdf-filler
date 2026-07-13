@@ -1,3 +1,4 @@
+import logging
 import re
 import shutil
 import threading
@@ -13,9 +14,11 @@ from app.schemas.models import AdjustFieldRequest, FillStartResponse, FillStatus
 from app.services.excel_reader import read_rows
 from app.services.pdf_overlay import overlay_fields
 from app.services.pdf_preview import pixel_to_point, point_to_pixel, render_preview
-from app.services.template_manager import TemplateManager
+from app.services.template_manager import PDF_FILE_RE, TemplateManager
 
 router = APIRouter(prefix="/fill", tags=["fill"])
+
+logger = logging.getLogger("pdf_filler")
 
 UPLOAD_DIR = DATA_BASE / "uploads"
 TEMPLATES_DIR = DATA_BASE / "templates"
@@ -24,6 +27,7 @@ OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 GENERATED_PREVIEW_CACHE = DATA_BASE / "preview_cache" / "generated"
 
 ALLOWED_EXCEL = {".xlsx", ".xlsm"}
+MAX_FILL_ROWS = 10_000
 
 manager = TemplateManager(TEMPLATES_DIR)
 
@@ -48,12 +52,37 @@ def _sanitize_filename(value: str) -> str:
 def _run_batch(batch_id: str, template: dict[str, Any], excel_path: Path) -> None:
     try:
         _, rows = read_rows(excel_path)
+        if len(rows) > MAX_FILL_ROWS:
+            _set_fill_state(
+                batch_id,
+                {"status": "error", "completed": 0, "total": 0,
+                 "error": f"Too many rows (max {MAX_FILL_ROWS})"},
+            )
+            return
         fields = template.get("fields", [])
         if not fields:
-            _set_fill_state(batch_id, {"status": "error", "error": "Template has no fields"})
+            _set_fill_state(
+                batch_id,
+                {"status": "error", "completed": 0, "total": 0,
+                 "error": "Template has no fields"},
+            )
             return
         pdf_file = template.get("pdf_file", "")
+        if not pdf_file or not PDF_FILE_RE.match(pdf_file):
+            _set_fill_state(
+                batch_id,
+                {"status": "error", "completed": 0, "total": 0,
+                 "error": "Template references an invalid PDF file"},
+            )
+            return
         pdf_path = UPLOAD_DIR / pdf_file
+        if not pdf_path.exists():
+            _set_fill_state(
+                batch_id,
+                {"status": "error", "completed": 0, "total": 0,
+                 "error": "Template PDF file not found on disk"},
+            )
+            return
 
         batch_output = OUTPUT_DIR / batch_id
         batch_output.mkdir(parents=True, exist_ok=True)
@@ -66,13 +95,22 @@ def _run_batch(batch_id: str, template: dict[str, Any], excel_path: Path) -> Non
                 output_path = batch_output / filename
                 overlay_fields(pdf_path, fields, row, output_path)
                 files.append(filename)
-            except Exception as exc:
-                err_msg = str(exc)
+            except Exception:
+                logger.exception("Overlay failed for row %d of batch %s", i + 1, batch_id)
                 _set_fill_state(batch_id, {
-                    "status": "error", "total": total, "completed": i, "error": err_msg,
+                    "status": "error", "total": total, "completed": i,
+                    "error": "An internal error occurred during PDF generation",
                 })
                 return
             _set_fill_state(batch_id, {"status": "processing", "total": total, "completed": i + 1})
+
+        existing = _get_fill_state(batch_id)
+        prior_warnings: list[str] = []
+        if existing is not None:
+            prior_warnings = existing.get("warnings", [])
+
+        zip_path = OUTPUT_DIR / f"{batch_id}.zip"
+        shutil.make_archive(str(zip_path.with_suffix("")), "zip", str(batch_output))
 
         _set_fill_state(batch_id, {
             "status": "completed",
@@ -80,13 +118,19 @@ def _run_batch(batch_id: str, template: dict[str, Any], excel_path: Path) -> Non
             "completed": total,
             "output_dir": str(batch_output),
             "files": files,
-            "warnings": [],
+            "warnings": prior_warnings,
             "template_id": template.get("id"),
             "excel_path": str(excel_path),
+            "zip_path": str(zip_path),
             "adjustments": {},
         })
-    except Exception as exc:
-        _set_fill_state(batch_id, {"status": "error", "error": str(exc)})
+    except Exception:
+        logger.exception("Batch %s failed", batch_id)
+        _set_fill_state(
+            batch_id,
+            {"status": "error", "completed": 0, "total": 0,
+             "error": "An internal error occurred during PDF generation"},
+        )
 
 
 @router.post("", response_model=FillStartResponse)
@@ -147,8 +191,10 @@ async def fill_download(batch_id: str) -> FileResponse:
         raise HTTPException(400, detail="Batch not yet completed")
 
     output_dir = Path(state["output_dir"])
-    zip_path = OUTPUT_DIR / f"{batch_id}.zip"
-    shutil.make_archive(str(zip_path.with_suffix("")), "zip", str(output_dir))
+    zip_path = Path(state.get("zip_path", ""))
+    if not zip_path.exists():
+        zip_path = OUTPUT_DIR / f"{batch_id}.zip"
+        shutil.make_archive(str(zip_path.with_suffix("")), "zip", str(output_dir))
 
     return FileResponse(
         str(zip_path),

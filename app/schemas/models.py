@@ -1,4 +1,7 @@
-from pydantic import BaseModel, Field
+import math
+from typing import Literal
+
+from pydantic import BaseModel, Field, field_validator
 
 
 class ExcelUploadResponse(BaseModel):
@@ -20,8 +23,20 @@ class TemplateField(BaseModel):
     y: float
     font_size: float = Field(default=11, ge=6, le=36)
     max_width: float | None = None
-    type: str = "column"
+    type: Literal["column", "text"] = "column"
     text_value: str = ""
+
+    @field_validator("x", "y")
+    @classmethod
+    def _reject_nan_inf(cls, v: float) -> float:
+        if math.isnan(v) or math.isinf(v):
+            raise ValueError("Coordinate must be a finite number")
+        return v
+
+    @field_validator("column")
+    @classmethod
+    def _strip_column(cls, v: str) -> str:
+        return v.strip()
 
 
 class TemplateSaveRequest(BaseModel):
@@ -36,6 +51,7 @@ class TemplateSaveResponse(BaseModel):
     pdf_file: str
     version: int
     field_count: int
+    page_count: int = 1
     created_at: str
     warnings: list[str] = []
 
@@ -47,6 +63,7 @@ class TemplateListItem(BaseModel):
     version: int
     created_at: str
     field_count: int
+    page_count: int = 1
 
 
 class TemplateRenameRequest(BaseModel):
@@ -60,9 +77,16 @@ class TemplateDuplicateRequest(BaseModel):
 class AdjustFieldRequest(BaseModel):
     column: str
     page: int = Field(ge=1)
-    font_size: float | None = None
+    font_size: float | None = Field(default=None, ge=6, le=36)
     x: float | None = None
     y: float | None = None
+
+    @field_validator("x", "y")
+    @classmethod
+    def _reject_nan_inf(cls, v: float | None) -> float | None:
+        if v is not None and (math.isnan(v) or math.isinf(v)):
+            raise ValueError("Coordinate must be a finite number")
+        return v
 
 
 class FillStartResponse(BaseModel):

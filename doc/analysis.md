@@ -214,7 +214,7 @@ Classic 2010s admin panel style. Flat header, bordered tables, blue links, gray 
 - [x] 19. Frontend uses classic 2010s styling (flat, bordered tables, simple palette)
       → `app/static/style.css` — flat design, bordered tables with alternating rows, blue header (#4A90D9), flat buttons with hover states, no rounded corners or glassmorphism
 - [x] 20. `uv run pytest -x` passes for all tests
-      → 72 tests collected, 72 passed (~5s). Guard chain: ruff ✅ mypy ✅ pytest ✅.
+       → 82 tests collected, 82 passed (~9s). Guard chain: ruff ✅ mypy ✅ pytest ✅.
 
 ### Phase 2
 
@@ -230,8 +230,8 @@ Classic 2010s admin panel style. Flat header, bordered tables, blue links, gray 
       → `overlay_fields()` in pdf_overlay.py (reads `field["page"]`, bounds-check against `doc.page_count`); `tests/test_pdf_overlay.py:test_skip_out_of_range_page`
 - [x] 6. Per-page preview endpoints — preview and generated-output preview all accept 1-indexed page, convert to 0-indexed for fitz
       → `get_preview()` in preview.py, `generated_preview()` in fill.py
-- [x] 7. Tests cover multi-page field positioning — fields with `page` values in save requests and overlay
-      → `tests/test_routers.py` (fields sent with `"page": N`); `tests/test_pdf_overlay.py` (page 0 for single-page, page 999 for out-of-range)
+- [~] 7. Tests cover multi-page field positioning — fields with `page` values in save requests and overlay
+       → `tests/test_routers.py` (fields sent with `"page": 1`); `tests/test_pdf_overlay.py` (page 0 for single-page, page 999 for out-of-range). **Gap**: no single test places fields on two different pages within one template save request — all template-router tests use `"page": 1` exclusively. The infrastructure (page-specific rendering, markers, overlap) is verified by other tests, but cross-page template saves are untested.
 
   **Minor gap (frontend-only):** Generated-output preview in Step 3 always sets `state.previewPageCount = 1`, so "Next Page" stays disabled even for multi-page output. Backend fully supports multi-page (`generated_preview()` accepts `page` parameter, calls `render_preview(pdf_path, zero_indexed)`). Fix: query the actual page count from the generated PDF via `render_preview()` or a dedicated metadata endpoint.
 
@@ -265,8 +265,8 @@ Phase 3 originally covered auto-position (suggest endpoint + word-overlap scorin
       → tests/test_template_manager.py (`test_rename_existing`, `test_rename_nonexistent`, `test_duplicate_existing`, `test_duplicate_nonexistent`, `test_duplicate_custom_name`, `test_list_all_skips_corrupt_file`, `test_get_corrupt_file_returns_none`)
 - [x] 12. Tests — 7 new integration tests: rename ×2, duplicate ×2, thumbnail ×3
       → tests/test_routers.py (`test_rename_template`, `test_rename_template_404`, `test_duplicate_template`, `test_duplicate_template_404`, `test_thumbnail`, `test_thumbnail_missing_pdf`, `test_thumbnail_invalid_pdf_file`)
-- [x] 13. Guard chain passes — ruff, mypy, 112/112 pytest
-      → ruff ✅, mypy ✅, `uv run pytest -x` 112 passed (~5s)
+- [x] 13. Guard chain passes — ruff, mypy, 82/82 pytest
+       → ruff ✅, mypy ✅, `uv run pytest -x` 82 passed (~9s)
 
 ### Critical fixes (discovered during real fill runs)
 

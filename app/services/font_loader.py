@@ -19,13 +19,21 @@ _SYSTEM_THAI_FONTS = [
     "C:/Windows/Fonts/AngsanaUPC.ttf",
 ]
 
+_UNIX_THAI_FONTS = [
+    "/usr/share/fonts/truetype/tahoma.ttf",
+    "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+    "/usr/share/fonts/truetype/noto/NotoSansThai-Regular.ttf",
+    "/usr/share/fonts/truetype/thai-tlwg/Garuda.ttf",
+    "/System/Library/Fonts/Tahoma.ttf",
+]
+
 
 def get_font_path() -> str:
     for name in _THAI_CANDIDATES:
         path = FONT_DIR / name
         if path.exists():
             return str(path)
-    for path_str in _SYSTEM_THAI_FONTS:
+    for path_str in _SYSTEM_THAI_FONTS + _UNIX_THAI_FONTS:
         path = Path(path_str)
         if path.exists():
             return str(path)

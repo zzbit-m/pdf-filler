@@ -1,4 +1,5 @@
 import json
+import logging
 import re
 import uuid
 from datetime import datetime, timezone
@@ -7,6 +8,8 @@ from typing import Any
 
 PDF_FILE_RE = re.compile(r"^[0-9a-f-]+\.pdf$")
 _TEMPLATE_ID_RE = re.compile(r"^[0-9a-f-]+$")
+
+logger = logging.getLogger("pdf_filler")
 
 
 class TemplateManager:
@@ -19,12 +22,15 @@ class TemplateManager:
             raise ValueError(f"Invalid template_id: {template_id}")
         return self.templates_dir / f"{template_id}.json"
 
-    def save(self, name: str, pdf_file: str, fields: list[dict[str, Any]]) -> str:
+    def save(
+        self, name: str, pdf_file: str, fields: list[dict[str, Any]], page_count: int = 1
+    ) -> str:
         template_id = str(uuid.uuid4())
         template = {
             "id": template_id,
             "name": name,
             "pdf_file": pdf_file,
+            "page_count": page_count,
             "version": 1,
             "fields": fields,
             "created_at": datetime.now(timezone.utc).isoformat(),
@@ -40,6 +46,7 @@ class TemplateManager:
             try:
                 data = json.loads(f.read_text(encoding="utf-8"))
             except (json.JSONDecodeError, OSError):
+                logger.warning("Skipping corrupt template file: %s", f.name)
                 continue
             try:
                 templates.append({
@@ -49,9 +56,10 @@ class TemplateManager:
                     "version": data["version"],
                     "created_at": data.get("created_at", ""),
                     "field_count": len(data.get("fields", [])),
+                    "page_count": data.get("page_count", 1),
                 })
             except KeyError:
-                continue
+                logger.warning("Skipping template with missing required keys: %s", f.name)
         return templates
 
     def get(self, template_id: str) -> dict[str, Any] | None:
@@ -65,6 +73,7 @@ class TemplateManager:
             result: dict[str, Any] = json.loads(path.read_text(encoding="utf-8"))
             return result
         except (json.JSONDecodeError, OSError):
+            logger.warning("Failed to read template JSON: %s", template_id)
             return None
 
     def rename(self, template_id: str, new_name: str) -> bool:

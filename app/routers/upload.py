@@ -35,6 +35,8 @@ async def upload_excel(file: UploadFile) -> ExcelUploadResponse:
     try:
         columns, rows = read_rows(filepath)
     except Exception:
+        import logging
+        logging.getLogger("pdf_filler").warning("Excel read failed", exc_info=True)
         filepath.unlink(missing_ok=True)
         raise HTTPException(
             400,
@@ -54,28 +56,30 @@ async def upload_pdf(file: UploadFile) -> PdfUploadResponse:
         raise HTTPException(413, detail="File too large (max 100MB)")
     pdf_id = str(uuid.uuid4())
     filepath = UPLOAD_DIR / f"{pdf_id}.pdf"
-    filepath.write_bytes(content)
 
     try:
-        doc = fitz.open(filepath)
+        doc = fitz.open(stream=content, filetype="pdf")
     except fitz.FileDataError:
         raise HTTPException(400, detail="Invalid or corrupted PDF file")
 
     try:
         if doc.needs_pass:
-            filepath.unlink()
             raise HTTPException(400, detail="Encrypted PDF — please provide a decrypted copy")
         page_count = doc.page_count
         if page_count == 0:
-            filepath.unlink()
             raise HTTPException(400, detail="PDF has no pages")
     finally:
         doc.close()
+
+    filepath.write_bytes(content)
 
     try:
         page_cache_dir = CACHE_DIR / pdf_id
         render_preview(filepath, 0, cache_dir=page_cache_dir)
     except Exception:
-        pass
+        import logging
+        logging.getLogger("pdf_filler").warning(
+            "Preview render failed for PDF %s", pdf_id, exc_info=True
+        )
 
     return PdfUploadResponse(pdf_id=pdf_id, page_count=page_count, filename=file.filename)

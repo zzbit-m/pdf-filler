@@ -9,54 +9,71 @@
 <body>
 <div id="app">
 <header>
-<h1>PDF Filler</h1>
+<h1><span class="brand-accent">PDF</span> Filler</h1>
 </header>
 <nav id="step-nav">
-<button class="step active" data-step="1">1. Upload</button>
-<button class="step" data-step="2">2. Position</button>
-<button class="step" data-step="3">3. Generate</button>
+<button class="step active" data-step="1">Upload</button>
+<button class="step" data-step="2">Position</button>
+<button class="step" data-step="3">Generate</button>
 </nav>
 <main>
 <section id="step-1" class="step-content active">
 <div class="upload-grid">
 <div class="upload-card">
-<h3>Upload Excel (.xlsx)</h3>
-<p class="hint">Your data file with employee information</p>
+<div class="card-header">
+<h3>Data file</h3>
+<p class="hint">Upload an Excel spreadsheet (.xlsx) with your data rows</p>
+</div>
 <div class="file-input-wrapper">
-  <input type="file" id="excel-input" accept=".xlsx,.xlsm" class="file-input-hidden">
-  <label for="excel-input" class="file-label">Choose File</label>
-  <span class="file-name" id="excel-file-name">No file chosen</span>
-  <button type="button" class="btn-clear" id="excel-clear" style="display:none">&times;</button>
+  <div class="dropzone" id="excel-dropzone">
+    <input type="file" id="excel-input" accept=".xlsx,.xlsm" class="file-input-hidden">
+    <div class="dropzone-content">
+      <span class="dropzone-icon"></span>
+      <span class="dropzone-text">Drop your Excel file here or <label for="excel-input" class="file-label">browse</label></span>
+      <span class="file-name" id="excel-file-name">No file chosen</span>
+      <button type="button" class="btn-clear" id="excel-clear" style="display:none" aria-label="Clear Excel file">&times;</button>
+    </div>
+  </div>
 </div>
 <div id="excel-status" class="msg-box" style="display:none"></div>
 <div id="excel-preview" style="display:none">
 <h4>Columns detected</h4>
+<input type="text" class="column-filter" placeholder="Filter columns..." oninput="filterColumnTags('column-list-upload', this.value)">
 <div id="column-list-upload" class="tag-list"></div>
 <h4>Preview rows</h4>
 <div id="preview-table-wrapper"></div>
 </div>
 </div>
 <div class="upload-card">
-<h3>Upload PDF template</h3>
-<p class="hint">The blank PDF form to fill in</p>
+<div class="card-header">
+<h3>PDF templates</h3>
+<p class="hint">Select one or more blank PDF forms — you can switch between them when positioning</p>
+</div>
 <div class="file-input-wrapper">
-  <input type="file" id="pdf-input" accept=".pdf" class="file-input-hidden">
-  <label for="pdf-input" class="file-label">Choose File</label>
-  <span class="file-name" id="pdf-file-name">No file chosen</span>
-  <button type="button" class="btn-clear" id="pdf-clear" style="display:none">&times;</button>
+  <div class="dropzone" id="pdf-dropzone">
+    <input type="file" id="pdf-input" accept=".pdf" class="file-input-hidden" multiple>
+    <div class="dropzone-content">
+      <span class="dropzone-icon"></span>
+      <span class="dropzone-text">Drop PDF files here or <label for="pdf-input" class="file-label">browse</label></span>
+      <span class="file-name" id="pdf-file-name">No files chosen</span>
+      <button type="button" class="btn-clear" id="pdf-clear" style="display:none" aria-label="Clear all PDFs">&times;</button>
+    </div>
+  </div>
 </div>
 <div id="pdf-status" class="msg-box" style="display:none"></div>
-<div id="pdf-info" style="display:none">
-<h4>PDF loaded</h4>
-<p id="pdf-details"></p>
-<div id="pdf-upload-preview-wrapper">
-<img id="pdf-upload-preview" alt="PDF Preview">
+<div id="pdf-list" style="display:none">
+  <h4>Uploaded PDFs</h4>
+  <div id="pdf-list-items"></div>
+  <button id="pdf-add-more" class="btn btn-small">+ Add More</button>
 </div>
 </div>
 </div>
+<div class="step-hint-block">
+  <button id="to-position-btn" class="btn btn-primary" disabled>Next: Position Fields</button>
+  <span class="step-hint">Upload both files to continue</span>
 </div>
-<button id="to-position-btn" class="btn btn-primary" disabled>Next: Position Fields &rarr;</button>
 </section>
+
 <section id="step-2" class="step-content">
 <div class="position-layout">
 <div class="preview-column">
@@ -64,56 +81,69 @@
 <img id="pdf-preview" alt="PDF Preview">
 </div>
 <div class="page-nav">
-<button id="prev-page" class="btn btn-small">&larr; Prev</button>
+<button id="prev-page" class="btn btn-small">Prev</button>
 <span id="page-indicator">Page 1 / 1</span>
-<button id="next-page" class="btn btn-small">Next &rarr;</button>
+<button id="next-page" class="btn btn-small">Next</button>
 </div>
 <p class="hint">Drag a column name from the sidebar and drop it onto the preview to set its position.</p>
 </div>
-            <aside class="sidebar">
-<h3>Available Columns</h3>
+<aside class="sidebar">
+<h3>PDF</h3>
+<select id="pdf-selector" class="pdf-selector"></select>
+<hr>
+<h3>Columns</h3>
+<input type="text" class="column-filter" placeholder="Filter columns..." oninput="filterColumnTags('available-columns', this.value)">
 <div id="available-columns" class="column-list"></div>
 <hr>
-<h3>Text Blocks</h3>
+<h3>Text</h3>
 <div class="text-block-input-bar">
-<input type="text" id="text-block-input" placeholder="Text content (e.g. 12/04/2026)">
+<input type="text" id="text-block-input" placeholder="Static text to place on the form">
 <button id="add-text-block-btn" class="btn btn-small">Add</button>
 </div>
 <hr>
 <h3>Template</h3>
 <input type="text" id="template-name-input" placeholder="Template name (e.g. Employee Form)">
 <div id="placed-fields-list">
-<p class="hint">No fields placed yet.</p>
+<p class="empty-state">No fields placed yet</p>
 </div>
 <button id="save-template-btn" class="btn btn-primary" disabled>Save Template</button>
 <div id="template-save-status" class="msg-box" style="display:none"></div>
 </aside>
 </div>
 </section>
+
 <section id="step-3" class="step-content">
 <h3>Generate Filled PDFs</h3>
 <div class="generate-form">
 <div class="form-group">
-<label>Saved Templates <a href="#" id="delete-all-templates" class="delete-all-link" style="display:none">Delete All</a></label>
-<div id="template-grid"><p class="hint">Loading templates...</p></div>
+<label>Templates <a href="#" id="delete-all-templates" class="delete-all-link" style="display:none">Delete All</a></label>
+<div id="template-grid"><p class="empty-state">Loading templates&hellip;</p></div>
 </div>
-                <div class="form-group">
-                  <label>Excel Data File</label>
-                  <p class="hint">Upload the Excel file with the data to fill in</p>
-                  <div class="file-input-wrapper" style="text-align:left">
-                    <input type="file" id="fill-excel-input" accept=".xlsx,.xlsm" class="file-input-hidden">
-                    <label for="fill-excel-input" class="file-label">Choose File</label>
-                    <span class="file-name" id="fill-excel-file-name">No file chosen</span>
-                    <button type="button" class="btn-clear" id="fill-excel-clear" style="display:none">&times;</button>
-                  </div>
-                </div>
-                <div id="fill-excel-status" class="msg-box" style="display:none"></div>
-<button id="start-fill-btn" class="btn btn-primary" disabled>Generate PDFs</button>
+<div class="form-group">
+  <label>Data file</label>
+  <p class="hint">Upload the Excel file with the data to fill in</p>
+  <div class="file-input-wrapper">
+    <div class="dropzone" id="fill-dropzone">
+      <input type="file" id="fill-excel-input" accept=".xlsx,.xlsm" class="file-input-hidden">
+      <div class="dropzone-content">
+        <span class="dropzone-icon"></span>
+        <span class="dropzone-text">Drop your Excel file here or <label for="fill-excel-input" class="file-label">browse</label></span>
+        <span class="file-name" id="fill-excel-file-name">No file chosen</span>
+        <button type="button" class="btn-clear" id="fill-excel-clear" style="display:none" aria-label="Clear data file">&times;</button>
+      </div>
+    </div>
+  </div>
+</div>
+<div id="fill-excel-status" class="msg-box" style="display:none"></div>
+<div class="step-hint-block">
+  <button id="start-fill-btn" class="btn btn-primary" disabled>Generate PDFs</button>
+  <span class="step-hint">Select a template and upload a data file to continue</span>
+</div>
 <div id="fill-warnings" style="display:none" class="msg-box warning-box"></div>
 </div>
 <div id="fill-progress" style="display:none">
 <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
-<span id="progress-text">Processing...</span>
+<span id="progress-text">Processing&hellip;</span>
 </div>
 <div id="fill-done" style="display:none">
 <a id="download-link" class="btn btn-success" download="filled_pdfs.zip">Download ZIP</a>
@@ -122,17 +152,17 @@
 <hr>
 <h4>Preview</h4>
 <div class="fill-preview-nav">
-<button id="prev-file" class="btn btn-small" disabled>&larr; Prev File</button>
+<button id="prev-file" class="btn btn-small" disabled>Prev File</button>
 <span id="fill-preview-file-info">File 1 / 1</span>
-<button id="next-file" class="btn btn-small" disabled>Next File &rarr;</button>
+<button id="next-file" class="btn btn-small" disabled>Next File</button>
 </div>
 <div id="fill-preview-wrapper">
 <img id="fill-preview-img" alt="Generated PDF Preview">
 </div>
 <div class="fill-preview-page-nav">
-<button id="prev-gen-page" class="btn btn-small" disabled>&larr; Prev Page</button>
+<button id="prev-gen-page" class="btn btn-small" disabled>Prev Page</button>
 <span id="fill-preview-page-info">Page 1 / 1</span>
-<button id="next-gen-page" class="btn btn-small" disabled>Next Page &rarr;</button>
+<button id="next-gen-page" class="btn btn-small" disabled>Next Page</button>
 </div>
 <div id="fill-adjust-panel" style="display:none">
 <div class="adjust-panel">
@@ -148,6 +178,31 @@
 </section>
 </main>
 </div>
-<script src="app.js?v=6"></script>
+
+<div id="lightbox" class="lightbox-overlay" style="display:none">
+  <div class="lightbox-content">
+    <img id="lightbox-img" alt="PDF Preview">
+    <div id="lightbox-info" class="lightbox-info"></div>
+  </div>
+</div>
+
+<script>
+(function() {
+  document.querySelectorAll('.dropzone').forEach(function(dz) {
+    dz.addEventListener('dragover', function(e) { e.preventDefault(); dz.classList.add('drag-over'); });
+    dz.addEventListener('dragleave', function() { dz.classList.remove('drag-over'); });
+    dz.addEventListener('drop', function(e) {
+      e.preventDefault();
+      dz.classList.remove('drag-over');
+      var input = dz.querySelector('input[type="file"]');
+      if (input && e.dataTransfer.files.length) {
+        input.files = e.dataTransfer.files;
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+    });
+  });
+})();
+</script>
+<script src="app.js?v=14"></script>
 </body>
 </html>

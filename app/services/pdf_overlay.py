@@ -20,10 +20,13 @@ def overlay_fields(
 
     doc = fitz.open(pdf_path)
     try:
+        if doc.page_count == 0:
+            return 0
         doc[0].insert_font(fontfile=font_path_str, fontname=font_name)
         for pn in range(1, doc.page_count):
             doc[pn].insert_font(fontfile=font_path_str, fontname=font_name)
 
+        font_obj = fitz.Font(fontfile=font_path_str)
         fields_placed = 0
         for field in fields:
             is_text = field.get("type") == "text"
@@ -51,25 +54,23 @@ def overlay_fields(
                 page = doc[pn]
                 text_rotate = page.rotation
 
-                half_fs = font_size * 0.5
                 if max_width:
                     half_h = font_size * 0.75
                     rect = fitz.Rect(x - max_width / 2, y - half_h,
                                      x + max_width / 2, y + half_h)
                     page.insert_textbox(rect, text, fontname=font_name,
                                         fontsize=font_size, color=(0, 0, 0),
-                                        rotate=text_rotate, align=fitz.TEXT_ALIGN_LEFT)
+                                        rotate=text_rotate, align=fitz.TEXT_ALIGN_CENTER)
                 else:
-                    font_obj = fitz.Font(fontfile=font_path_str)
                     tw = font_obj.text_length(text, fontsize=font_size)
                     if text_rotate == 90:
-                        bx, by = x + half_fs, y + tw / 2
+                        bx, by = x, y + tw / 2
                     elif text_rotate == 180:
-                        bx, by = x + tw / 2, y - half_fs
+                        bx, by = x + tw / 2, y
                     elif text_rotate == 270:
-                        bx, by = x - half_fs, y - tw / 2
+                        bx, by = x, y - tw / 2
                     else:
-                        bx, by = x - tw / 2, y + half_fs
+                        bx, by = x - tw / 2, y
                     point = fitz.Point(bx, by)
                     page.insert_text(point, text, fontname=font_name,
                                      fontsize=font_size, color=(0, 0, 0),
