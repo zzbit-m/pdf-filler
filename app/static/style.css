@@ -186,7 +186,7 @@ header h1 {
 
 /* ---- Layout: upload grid ---- */
 
-.upload-grid { display: flex; gap: 20px; margin-bottom: 28px; align-items: stretch; }
+.upload-grid { display: flex; gap: 20px; margin-bottom: 28px; }
 
 .upload-card {
     flex: 1;
@@ -200,17 +200,7 @@ header h1 {
 }
 
 .upload-card .card-header {
-    min-height: 88px;
-}
-
-.upload-card > .file-input-wrapper {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-}
-
-.upload-card > .file-input-wrapper > .dropzone {
-    flex: 1;
+    min-height: 0;
 }
 
 .upload-card.file-loaded { border-style: solid; border-color: var(--accent); background: var(--paper); }
@@ -244,6 +234,10 @@ header h1 {
 .dropzone {
     border: 1.5px dashed var(--line);
     padding: 22px 16px;
+    min-height: 140px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     text-align: center;
     cursor: pointer;
     transition: border-color var(--ease), background var(--ease);
